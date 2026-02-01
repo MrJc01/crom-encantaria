@@ -1,0 +1,76 @@
+{
+    "units": [
+        {
+            "unitId": "knight_base",
+            "name": "Cavaleiro",
+            "description": "Guerreiro corpo-a-corpo equilibrado. Fiel ao reino e resistente em batalha.",
+            "baseStats": {
+                "health": 200,
+                "damage": 25,
+                "attackSpeed": 1.0,
+                "range": 1.5,
+                "moveSpeed": 2.0
+            },
+            "manaCost": 3,
+            "tags": [
+                "HUMAN",
+                "STEEL",
+                "MELEE"
+            ],
+            "slots": {
+                "weapon": true,
+                "armor": true,
+                "artifact": true
+            },
+            "sprite3d": "models/knight.glb"
+        },
+        {
+            "unitId": "archer_base",
+            "name": "Arqueira",
+            "description": "Atiradora ágil das florestas. Precisa e mortal à distância.",
+            "baseStats": {
+                "health": 120,
+                "damage": 35,
+                "attackSpeed": 1.2,
+                "range": 6.0,
+                "moveSpeed": 2.5
+            },
+            "manaCost": 3,
+            "tags": [
+                "HUMAN",
+                "NATURE",
+                "RANGED"
+            ],
+            "slots": {
+                "weapon": true,
+                "armor": true,
+                "artifact": true
+            },
+            "sprite3d": "models/archer.glb"
+        },
+        {
+            "unitId": "mage_base",
+            "name": "Mago Solar",
+            "description": "Conjurador de luz. Canaliza o poder do sol para devastar inimigos.",
+            "baseStats": {
+                "health": 80,
+                "damage": 60,
+                "attackSpeed": 0.8,
+                "range": 5.5,
+                "moveSpeed": 1.8
+            },
+            "manaCost": 4,
+            "tags": [
+                "HUMAN",
+                "SOLAR",
+                "RANGED"
+            ],
+            "slots": {
+                "weapon": true,
+                "armor": false,
+                "artifact": true
+            },
+            "sprite3d": "models/mage_solar.glb"
+        }
+    ]
+}

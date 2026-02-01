@@ -1,0 +1,104 @@
+{
+    "items": [
+        {
+            "itemId": "sword_flame_t1",
+            "name": "Espada de Fogo",
+            "description": "Uma lâmina forjada em chamas eternas. Queima inimigos ao toque.",
+            "slot": "weapon",
+            "manaWeight": 1,
+            "statsModifier": {
+                "damage": 50,
+                "attackSpeed": -0.1
+            },
+            "requirements": {
+                "allowedTags": [
+                    "HUMAN",
+                    "DEMON"
+                ],
+                "forbiddenTags": [
+                    "WATER_ELEMENTAL",
+                    "NATURE"
+                ]
+            },
+            "sprite3d": "models/items/sword_flame.glb"
+        },
+        {
+            "itemId": "longbow_t2",
+            "name": "Arco Longo",
+            "description": "Arco de precisão para atiradores experientes. Alcance aumentado.",
+            "slot": "weapon",
+            "manaWeight": 1,
+            "statsModifier": {
+                "damage": 20,
+                "range": 2.0
+            },
+            "requirements": {
+                "allowedTags": [
+                    "RANGED"
+                ],
+                "forbiddenTags": [
+                    "MELEE"
+                ]
+            },
+            "sprite3d": "models/items/longbow.glb"
+        },
+        {
+            "itemId": "steel_plate_t2",
+            "name": "Armadura de Placas",
+            "description": "Proteção pesada de aço forjado. Reduz velocidade mas aumenta resistência.",
+            "slot": "armor",
+            "manaWeight": 1,
+            "statsModifier": {
+                "health": 100,
+                "moveSpeed": -0.3
+            },
+            "requirements": {
+                "allowedTags": [
+                    "HUMAN",
+                    "STEEL"
+                ],
+                "forbiddenTags": []
+            },
+            "sprite3d": "models/items/steel_plate.glb"
+        },
+        {
+            "itemId": "staff_ice_t1",
+            "name": "Cajado de Gelo",
+            "description": "Canaliza o frio eterno. Incompatível com magia solar.",
+            "slot": "weapon",
+            "manaWeight": 2,
+            "statsModifier": {
+                "damage": 40,
+                "attackSpeed": 0.2
+            },
+            "requirements": {
+                "allowedTags": [],
+                "forbiddenTags": [
+                    "SOLAR"
+                ]
+            },
+            "sprite3d": "models/items/staff_ice.glb"
+        },
+        {
+            "itemId": "shadow_relic",
+            "name": "Relíquia das Sombras",
+            "description": "Artefato corrompido pelo vazio. Apenas criaturas das trevas podem usar.",
+            "slot": "artifact",
+            "manaWeight": 2,
+            "statsModifier": {
+                "damage": 30,
+                "health": -20
+            },
+            "requirements": {
+                "allowedTags": [
+                    "VOID",
+                    "DEMON"
+                ],
+                "forbiddenTags": [
+                    "SOLAR"
+                ]
+            },
+            "sprite3d": "models/items/shadow_relic.glb"
+        }
+    ]
+}

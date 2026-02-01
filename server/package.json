@@ -1,0 +1,29 @@
+{
+  "name": "magic-royale-server",
+  "version": "0.1.0",
+  "description": "Magic Royale - Authoritative Game Server",
+  "main": "dist/server/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server/index.ts",
+    "start": "node dist/server/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "game-server",
+    "rts",
+    "multiplayer"
+  ],
+  "author": "CROM Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
