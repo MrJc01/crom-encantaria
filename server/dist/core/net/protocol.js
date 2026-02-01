@@ -42,6 +42,23 @@ export var S2CMessageType;
     S2CMessageType["ERROR"] = "ERROR";
 })(S2CMessageType || (S2CMessageType = {}));
 /**
+ * Códigos de erro do servidor (Anti-Cheat).
+ * Usados para identificar o tipo de violação.
+ */
+export var ErrorCode;
+(function (ErrorCode) {
+    /** Mana insuficiente para spawnar a carta */
+    ErrorCode["INSUFFICIENT_MANA"] = "INSUFFICIENT_MANA";
+    /** Posição de spawn fora da zona permitida */
+    ErrorCode["INVALID_POSITION"] = "INVALID_POSITION";
+    /** Índice da carta fora do range válido (0-7) */
+    ErrorCode["INVALID_CARD_INDEX"] = "INVALID_CARD_INDEX";
+    /** Carta não encontrada no deck do jogador */
+    ErrorCode["CARD_NOT_FOUND"] = "CARD_NOT_FOUND";
+    /** Jogo não está em execução */
+    ErrorCode["GAME_NOT_RUNNING"] = "GAME_NOT_RUNNING";
+})(ErrorCode || (ErrorCode = {}));
+/**
  * Estados numéricos para compressão no protocolo.
  * Mapeia EntityState para números (menor payload).
  */

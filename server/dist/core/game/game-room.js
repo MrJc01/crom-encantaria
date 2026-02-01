@@ -12,7 +12,17 @@ import { PhysicsSystem } from './physics.js';
 import { createEntity } from './entity.js';
 import { CombatSystem } from './combat.js';
 import { getUnitById, getItemById } from '../../data/loader.js';
-import { S2CMessageType, stateToCode, } from '../net/protocol.js';
+import { calculateCardCostByIds } from '../validation/deck-validator.js';
+import { S2CMessageType, ErrorCode, stateToCode, } from '../net/protocol.js';
+// ============================================
+// CONSTANTES DE ANTI-CHEAT
+// ============================================
+/** Zona de deploy do Player 1 (inferior): Y de 0 a 15 */
+const DEPLOY_ZONE_P1 = { minY: 0, maxY: 15 };
+/** Zona de deploy do Player 2 (superior): Y de 25 a 40 */
+const DEPLOY_ZONE_P2 = { minY: 25, maxY: 40 };
+/** Limites do mapa em X */
+const MAP_BOUNDS_X = { min: 0, max: 30 };
 const DEFAULT_CONFIG = {
     tickRate: 20,
     maxDuration: 180,
@@ -40,6 +50,7 @@ export class GameRoom {
     tickDuration; // ms entre ticks
     // ========== FASE 3: WebSocket ==========
     broadcastFn = null;
+    sendToPlayerFn = null;
     onGameEnd = null;
     // ========== Sistemas de Jogo ==========
     physicsSystem;
@@ -48,11 +59,12 @@ export class GameRoom {
     entityCounter;
     constructor(roomId, config) {
         this.roomId = roomId;
-        const { broadcastFn, onGameEnd, ...restConfig } = config || {};
+        const { broadcastFn, sendToPlayerFn, onGameEnd, ...restConfig } = config || {};
         this.config = { ...DEFAULT_CONFIG, ...restConfig };
         this.tickDuration = 1000 / this.config.tickRate; // 50ms para 20Hz
         // Callbacks WebSocket
         this.broadcastFn = broadcastFn ?? null;
+        this.sendToPlayerFn = sendToPlayerFn ?? null;
         this.onGameEnd = onGameEnd ?? null;
         // Inicializar sistemas
         this.physicsSystem = new PhysicsSystem();
@@ -448,16 +460,113 @@ export class GameRoom {
     /**
      * Processa requisição de spawn de carta.
      * Chamado pelo SocketManager quando recebe SPAWN_CARD.
+     *
+     * FASE 4: Anti-Cheat & Economy Validation
+     * Validações em camadas:
+     * 1. Índice da carta (0-7)
+     * 2. Posição (deploy zones)
+     * 3. Existência da carta no deck
+     * 4. Mana suficiente
      */
     handleSpawnRequest(playerIndex, cardIndex, x, y) {
-        // TODO: Validar cardIndex contra o deck do jogador
-        // TODO: Verificar mana suficiente
-        // TODO: Validar posição dentro da área permitida
-        // Por agora, usar unidade padrão para teste
-        const testUnits = ['knight_base', 'archer_base', 'mage_base'];
-        const unitId = testUnits[cardIndex % testUnits.length];
-        const entity = this.spawnUnit(playerIndex, unitId, x, y);
+        // ===== VALIDAÇÃO 1: Índice da carta (0-7) =====
+        if (cardIndex < 0 || cardIndex > 7) {
+            console.warn(`[AntiCheat] Bloqueado spawn P${playerIndex}: índice de carta inválido (${cardIndex})`);
+            this.sendErrorToPlayer(playerIndex, ErrorCode.INVALID_CARD_INDEX, `Índice de carta inválido: ${cardIndex}. Use 0-7.`);
+            return false;
+        }
+        // ===== VALIDAÇÃO 2: Posição (Deploy Zones) =====
+        const zone = playerIndex === 1 ? DEPLOY_ZONE_P1 : DEPLOY_ZONE_P2;
+        if (y < zone.minY || y > zone.maxY || x < MAP_BOUNDS_X.min || x > MAP_BOUNDS_X.max) {
+            console.warn(`[AntiCheat] Bloqueado spawn P${playerIndex}: posição fora da zona. ` +
+                `Pos: (${x}, ${y}), Zona Y: [${zone.minY}-${zone.maxY}]`);
+            this.sendErrorToPlayer(playerIndex, ErrorCode.INVALID_POSITION, `Posição inválida: spawn fora da sua zona de deploy.`);
+            return false;
+        }
+        // ===== VALIDAÇÃO 3: Obter deck e carta =====
+        const deck = this.getPlayerDeck(playerIndex);
+        if (!deck || !deck.cards[cardIndex]) {
+            console.warn(`[AntiCheat] Bloqueado spawn P${playerIndex}: carta não encontrada no índice ${cardIndex}`);
+            this.sendErrorToPlayer(playerIndex, ErrorCode.CARD_NOT_FOUND, `Carta não encontrada no índice ${cardIndex}.`);
+            return false;
+        }
+        const card = deck.cards[cardIndex];
+        // ===== VALIDAÇÃO 4: Calcular custo real =====
+        const cost = calculateCardCostByIds(card.baseUnitId, card.equippedItems);
+        if (cost === null) {
+            console.error(`[AntiCheat] Carta com IDs inválidos: unitId=${card.baseUnitId}, items=${card.equippedItems.join(',')}`);
+            this.sendErrorToPlayer(playerIndex, ErrorCode.CARD_NOT_FOUND, `Carta com dados inválidos.`);
+            return false;
+        }
+        // ===== VALIDAÇÃO 5: Mana suficiente =====
+        const currentMana = playerIndex === 1
+            ? this.gameState.mana.player1
+            : this.gameState.mana.player2;
+        if (currentMana < cost) {
+            console.warn(`[AntiCheat] Bloqueado spawn P${playerIndex} por falta de mana ` +
+                `(Tem: ${currentMana.toFixed(1)}, Precisa: ${cost})`);
+            this.sendErrorToPlayer(playerIndex, ErrorCode.INSUFFICIENT_MANA, `Mana insuficiente. Você tem ${currentMana.toFixed(1)}, precisa de ${cost}.`);
+            return false;
+        }
+        // ===== SUCESSO: Deduzir mana =====
+        if (playerIndex === 1) {
+            this.gameState.mana.player1 -= cost;
+        }
+        else {
+            this.gameState.mana.player2 -= cost;
+        }
+        // ===== Spawnar unidade =====
+        const entity = this.spawnUnit(playerIndex, card.baseUnitId, x, y, card.equippedItems);
+        if (entity) {
+            console.log(`[AntiCheat] ✅ Spawn P${playerIndex} autorizado. ` +
+                `Carta: ${card.baseUnitId}, Custo: ${cost}, ` +
+                `Mana restante: ${(playerIndex === 1
+                    ? this.gameState.mana.player1
+                    : this.gameState.mana.player2).toFixed(1)}`);
+        }
         return entity !== null;
+    }
+    /**
+     * Envia mensagem de erro para um jogador específico.
+     * Usado pelo sistema anti-cheat para notificar violações.
+     */
+    sendErrorToPlayer(playerIndex, code, message) {
+        if (this.sendToPlayerFn) {
+            this.sendToPlayerFn(playerIndex, {
+                type: S2CMessageType.ERROR,
+                code,
+                message,
+            });
+        }
+    }
+    /**
+     * Obtém o deck do jogador.
+     * TODO: Implementar persistência real (banco de dados/cache)
+     * Por agora, retorna deck de teste para desenvolvimento.
+     */
+    getPlayerDeck(playerIndex) {
+        // Deck de teste para desenvolvimento
+        // Em produção, buscar do banco de dados pelo playerId
+        const playerId = playerIndex === 1
+            ? this.player1?.playerId || ''
+            : this.player2?.playerId || '';
+        return {
+            deckId: `test_deck_p${playerIndex}`,
+            playerId,
+            deckName: 'Test Deck',
+            cards: [
+                { slotIndex: 0, baseUnitId: 'knight_base', equippedItems: [] },
+                { slotIndex: 1, baseUnitId: 'archer_base', equippedItems: [] },
+                { slotIndex: 2, baseUnitId: 'mage_base', equippedItems: [] },
+                { slotIndex: 3, baseUnitId: 'knight_base', equippedItems: [] },
+                { slotIndex: 4, baseUnitId: 'archer_base', equippedItems: [] },
+                { slotIndex: 5, baseUnitId: 'mage_base', equippedItems: [] },
+                { slotIndex: 6, baseUnitId: 'knight_base', equippedItems: [] },
+                { slotIndex: 7, baseUnitId: 'archer_base', equippedItems: [] },
+            ],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
     }
     /**
      * Faz broadcast de uma mensagem para os clientes da sala.

@@ -48,6 +48,10 @@ export interface PlayerConnection {
  */
 export type BroadcastFn = (message: S2CMessage) => void;
 /**
+ * Callback para enviar mensagem para um jogador específico.
+ */
+export type SendToPlayerFn = (playerIndex: 1 | 2, message: S2CMessage) => void;
+/**
  * Callback para fim de jogo.
  */
 export type OnGameEndFn = (winnerId: string, reason: string) => void;
@@ -67,6 +71,8 @@ export interface GameRoomConfig {
     verboseLogging?: boolean;
     /** Callback para broadcast de mensagens (WebSocket) */
     broadcastFn?: BroadcastFn;
+    /** Callback para enviar mensagem a um jogador específico */
+    sendToPlayerFn?: SendToPlayerFn;
     /** Callback chamado quando a partida termina */
     onGameEnd?: OnGameEndFn;
 }
@@ -89,6 +95,7 @@ export declare class GameRoom {
     private tickInterval;
     private tickDuration;
     private broadcastFn;
+    private sendToPlayerFn;
     private onGameEnd;
     private physicsSystem;
     private combatSystem;
@@ -200,8 +207,26 @@ export declare class GameRoom {
     /**
      * Processa requisição de spawn de carta.
      * Chamado pelo SocketManager quando recebe SPAWN_CARD.
+     *
+     * FASE 4: Anti-Cheat & Economy Validation
+     * Validações em camadas:
+     * 1. Índice da carta (0-7)
+     * 2. Posição (deploy zones)
+     * 3. Existência da carta no deck
+     * 4. Mana suficiente
      */
     handleSpawnRequest(playerIndex: 1 | 2, cardIndex: number, x: number, y: number): boolean;
+    /**
+     * Envia mensagem de erro para um jogador específico.
+     * Usado pelo sistema anti-cheat para notificar violações.
+     */
+    private sendErrorToPlayer;
+    /**
+     * Obtém o deck do jogador.
+     * TODO: Implementar persistência real (banco de dados/cache)
+     * Por agora, retorna deck de teste para desenvolvimento.
+     */
+    private getPlayerDeck;
     /**
      * Faz broadcast de uma mensagem para os clientes da sala.
      */

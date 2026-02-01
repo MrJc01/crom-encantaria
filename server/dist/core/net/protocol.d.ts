@@ -39,6 +39,22 @@ export declare enum S2CMessageType {
     ERROR = "ERROR"
 }
 /**
+ * Códigos de erro do servidor (Anti-Cheat).
+ * Usados para identificar o tipo de violação.
+ */
+export declare enum ErrorCode {
+    /** Mana insuficiente para spawnar a carta */
+    INSUFFICIENT_MANA = "INSUFFICIENT_MANA",
+    /** Posição de spawn fora da zona permitida */
+    INVALID_POSITION = "INVALID_POSITION",
+    /** Índice da carta fora do range válido (0-7) */
+    INVALID_CARD_INDEX = "INVALID_CARD_INDEX",
+    /** Carta não encontrada no deck do jogador */
+    CARD_NOT_FOUND = "CARD_NOT_FOUND",
+    /** Jogo não está em execução */
+    GAME_NOT_RUNNING = "GAME_NOT_RUNNING"
+}
+/**
  * Estados numéricos para compressão no protocolo.
  * Mapeia EntityState para números (menor payload).
  */
