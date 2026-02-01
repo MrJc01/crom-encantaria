@@ -27,6 +27,7 @@ import {
     ErrorCode,
     stateToCode,
 } from '../net/protocol.js';
+import type { CardConfig, PlayerDeck } from '../types/deck.js';
 
 // ============================================
 // CONSTANTES DE ANTI-CHEAT
@@ -68,6 +69,7 @@ export interface GameState {
 export interface PlayerConnection {
     playerId: string;
     deckId: string;
+    deckCards: CardConfig[];
 }
 
 /**
@@ -775,32 +777,18 @@ export class GameRoom {
 
     /**
      * Obtém o deck do jogador.
-     * TODO: Implementar persistência real (banco de dados/cache)
-     * Por agora, retorna deck de teste para desenvolvimento.
      */
     private getPlayerDeck(playerIndex: 1 | 2): PlayerDeck | null {
-        // Deck de teste para desenvolvimento
-        // Em produção, buscar do banco de dados pelo playerId
-        const playerId = playerIndex === 1
-            ? this.player1?.playerId || ''
-            : this.player2?.playerId || '';
+        const player = playerIndex === 1 ? this.player1 : this.player2;
+        if (!player) return null;
 
         return {
-            deckId: `test_deck_p${playerIndex}`,
-            playerId,
-            deckName: 'Test Deck',
-            cards: [
-                { slotIndex: 0, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 1, baseUnitId: 'archer_base', equippedItems: [] },
-                { slotIndex: 2, baseUnitId: 'mage_base', equippedItems: [] },
-                { slotIndex: 3, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 4, baseUnitId: 'archer_base', equippedItems: [] },
-                { slotIndex: 5, baseUnitId: 'mage_base', equippedItems: [] },
-                { slotIndex: 6, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 7, baseUnitId: 'archer_base', equippedItems: [] },
-            ],
+            deckId: player.deckId,
+            playerId: player.playerId,
+            deckName: 'Player Deck',
+            cards: player.deckCards,
             createdAt: new Date(),
-            updatedAt: new Date(),
+            updatedAt: new Date()
         };
     }
 

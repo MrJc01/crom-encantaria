@@ -19,7 +19,10 @@ import {
     parseC2SMessage,
     serializeMessage,
     createErrorMessage,
+    S2CMessageType,
 } from '../core/net/protocol.js';
+import { SimpleDB, PlayerModel, DeckModel } from '../data/db.js';
+import type { CardConfig } from '../core/types/deck.js';
 
 // ============================================
 // TIPOS INTERNOS
@@ -41,6 +44,10 @@ interface ConnectedClient {
     roomId: string | null;
     /** Timestamp da conexão */
     connectedAt: number;
+    /** Dados do jogador logado */
+    player?: PlayerModel;
+    /** Dados do deck ativo */
+    deck?: DeckModel;
 }
 
 /**
@@ -236,6 +243,11 @@ export class SocketManager {
             }
 
             switch (message.type) {
+                case C2SMessageType.LOGIN:
+                    // @ts-ignore - TS doesn't know about the new type yet due to partial compilation view? or simpler just cast
+                    this.handleLogin(socketId, (message as any).playerId);
+                    break;
+
                 case C2SMessageType.QUEUE_JOIN:
                     this.handleQueueJoin(socketId, message.deckId);
                     break;
@@ -281,6 +293,60 @@ export class SocketManager {
     }
 
     // ============================================
+    // AUTHENTICATION
+    // ============================================
+
+    /**
+     * Processa login do jogador.
+     */
+    private handleLogin(socketId: string, playerId: string): void {
+        const client = this.clients.get(socketId);
+        if (!client) return;
+
+        if (!playerId) {
+            this.sendTo(socketId, createErrorMessage('INVALID_PARAMS', 'PlayerID is required'));
+            return;
+        }
+
+        const db = SimpleDB.getInstance();
+        const player = db.getPlayer(playerId);
+
+        if (!player) {
+            this.sendTo(socketId, createErrorMessage('PLAYER_NOT_FOUND', 'Jogador não encontrado'));
+            return;
+        }
+
+        const deck = db.getDeck(playerId); // Tenta pegar deck default
+
+        if (!deck) {
+            this.sendTo(socketId, createErrorMessage('DECK_NOT_FOUND', 'Nenhum deck encontrado para o jogador'));
+            return;
+        }
+
+        // Armazenar sessão
+        client.player = player;
+        client.deck = deck;
+        client.deckId = deck.id;
+
+        // Responder sucesso
+        console.log(`[SocketManager] 🔑 Login sucesso: ${playerId} (${client.socketId})`);
+
+        this.sendTo(socketId, {
+            type: S2CMessageType.LOGIN_SUCCESS,
+            player: {
+                id: player.id,
+                name: player.name,
+                inventory: player.inventory
+            },
+            deck: {
+                id: deck.id,
+                name: deck.name,
+                cards: deck.cards
+            }
+        });
+    }
+
+    // ============================================
     // MATCHMAKING
     // ============================================
 
@@ -294,6 +360,12 @@ export class SocketManager {
         // Verificar se já está na fila ou em jogo
         if (client.state !== ClientState.CONNECTED) {
             this.sendTo(socketId, createErrorMessage('INVALID_STATE', 'Já está na fila ou em jogo'));
+            return;
+        }
+
+        // Verificar login
+        if (!client.player || !client.deck) {
+            this.sendTo(socketId, createErrorMessage('LOGIN_REQUIRED', 'Faça login antes de jogar'));
             return;
         }
 
@@ -387,8 +459,25 @@ export class SocketManager {
         });
 
         // Adicionar jogadores
-        const p1Conn: PlayerConnection = { playerId: client1.socketId, deckId: client1.deckId };
-        const p2Conn: PlayerConnection = { playerId: client2.socketId, deckId: client2.deckId };
+        // Adicionar jogadores (Usando os decks reais carregados no login)
+        const p1Conn: PlayerConnection = {
+            playerId: client1.player!.id, // Usar ID real
+            deckId: client1.deck!.id,
+            deckCards: client1.deck!.cards.map((id, index) => ({
+                slotIndex: index,
+                baseUnitId: id,
+                equippedItems: []
+            }))
+        };
+        const p2Conn: PlayerConnection = {
+            playerId: client2.player!.id, // Usar ID real
+            deckId: client2.deck!.id,
+            deckCards: client2.deck!.cards.map((id, index) => ({
+                slotIndex: index,
+                baseUnitId: id,
+                equippedItems: []
+            }))
+        };
 
         room.addPlayer(p1Conn, 1);
         room.addPlayer(p2Conn, 2);

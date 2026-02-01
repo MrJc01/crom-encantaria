@@ -26,6 +26,8 @@ export enum C2SMessageType {
     QUEUE_LEAVE = 'QUEUE_LEAVE',
     /** Spawnar uma carta no campo */
     SPAWN_CARD = 'SPAWN_CARD',
+    /** Autenticar jogador */
+    LOGIN = 'LOGIN',
 }
 
 /**
@@ -34,6 +36,8 @@ export enum C2SMessageType {
 export enum S2CMessageType {
     /** Confirmação de entrada na fila */
     QUEUE_JOINED = 'QUEUE_JOINED',
+    /** Login realizado com sucesso */
+    LOGIN_SUCCESS = 'LOGIN_SUCCESS',
     /** Partida encontrada, jogo iniciando */
     MATCH_START = 'MATCH_START',
     /** Uma entidade foi spawnada (dados estáticos) */
@@ -130,9 +134,17 @@ export interface C2SSpawnCard extends C2SMessageBase {
 }
 
 /**
+ * Jogador quer fazer login.
+ */
+export interface C2SLogin extends C2SMessageBase {
+    type: C2SMessageType.LOGIN;
+    playerId: string;
+}
+
+/**
  * União de todas as mensagens C2S.
  */
-export type C2SMessage = C2SQueueJoin | C2SQueueLeave | C2SSpawnCard;
+export type C2SMessage = C2SQueueJoin | C2SQueueLeave | C2SSpawnCard | C2SLogin;
 
 // ============================================
 // MENSAGENS SERVER → CLIENT (S2C)
@@ -275,10 +287,28 @@ export interface S2CError extends S2CMessageBase {
 }
 
 /**
+ * Login sucesso.
+ */
+export interface S2CLoginSuccess extends S2CMessageBase {
+    type: S2CMessageType.LOGIN_SUCCESS;
+    player: {
+        id: string;
+        name: string;
+        inventory: string[];
+    };
+    deck: {
+        id: string;
+        name: string;
+        cards: string[];
+    };
+}
+
+/**
  * União de todas as mensagens S2C.
  */
 export type S2CMessage =
     | S2CQueueJoined
+    | S2CLoginSuccess
     | S2CMatchStart
     | S2CEntitySpawned
     | S2CGameTick

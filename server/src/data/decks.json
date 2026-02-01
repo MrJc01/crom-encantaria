@@ -1,0 +1,32 @@
+[
+  {
+    "id": "deck_h1_default",
+    "playerId": "hero_1",
+    "name": "Starter Deck",
+    "cards": [
+      "archers",
+      "knights",
+      "dragon",
+      "fireball",
+      "arrows",
+      "giant",
+      "pecca",
+      "wizard"
+    ]
+  },
+  {
+    "id": "deck_h2_default",
+    "playerId": "hero_2",
+    "name": "Starter Deck",
+    "cards": [
+      "archers",
+      "knights",
+      "dragon",
+      "fireball",
+      "arrows",
+      "giant",
+      "pecca",
+      "wizard"
+    ]
+  }
+]
