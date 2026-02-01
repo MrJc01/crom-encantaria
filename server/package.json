@@ -1,7 +1,8 @@
 {
   "name": "magic-royale-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Magic Royale - Authoritative Game Server",
+  "type": "module",
   "main": "dist/server/index.js",
   "scripts": {
     "build": "tsc",
