@@ -4,7 +4,7 @@
  * Gerencia uma instância de partida 1v1.
  * Implementa o tick loop a 20Hz para simulação autoritativa.
  * 
- * FASE 2: Integração com Physics, Entity e Combat systems.
+ * FASE 3: Integração com WebSocket e broadcast de estado.
  * 
  * @module core/game/game-room
  */
@@ -15,6 +15,15 @@ import { CombatSystem, CombatStats } from './combat.js';
 import { getUnitById, getItemById } from '../../data/loader.js';
 import type { UnitBaseStats } from '../types/unit.js';
 import type { ItemStatsModifier } from '../types/item.js';
+import {
+    S2CMessage,
+    S2CMessageType,
+    EntityDelta,
+    TowerDelta,
+    GameTickPayload,
+    EntitySpawnData,
+    stateToCode,
+} from '../net/protocol.js';
 
 /**
  * Estado de uma torre.
@@ -40,13 +49,22 @@ export interface GameState {
 }
 
 /**
- * Conexão de um jogador (placeholder para WebSocket futuro).
+ * Conexão de um jogador.
  */
 export interface PlayerConnection {
     playerId: string;
     deckId: string;
-    // socket: WebSocket; // Futuro
 }
+
+/**
+ * Callback para broadcast de mensagens.
+ */
+export type BroadcastFn = (message: S2CMessage) => void;
+
+/**
+ * Callback para fim de jogo.
+ */
+export type OnGameEndFn = (winnerId: string, reason: string) => void;
 
 /**
  * Configuração do GameRoom.
@@ -62,9 +80,13 @@ export interface GameRoomConfig {
     manaRegenRate?: number;
     /** Se true, loga detalhes de combate */
     verboseLogging?: boolean;
+    /** Callback para broadcast de mensagens (WebSocket) */
+    broadcastFn?: BroadcastFn;
+    /** Callback chamado quando a partida termina */
+    onGameEnd?: OnGameEndFn;
 }
 
-const DEFAULT_CONFIG: Required<GameRoomConfig> = {
+const DEFAULT_CONFIG: Required<Omit<GameRoomConfig, 'broadcastFn' | 'onGameEnd'>> = {
     tickRate: 20,
     maxDuration: 180,
     initialMana: 5,
@@ -87,11 +109,15 @@ export class GameRoom {
     private player1: PlayerConnection | null = null;
     private player2: PlayerConnection | null = null;
     private gameState: GameState;
-    private config: Required<GameRoomConfig>;
+    private config: Required<Omit<GameRoomConfig, 'broadcastFn' | 'onGameEnd'>>;
     private tickInterval: ReturnType<typeof setInterval> | null = null;
     private tickDuration: number; // ms entre ticks
 
-    // ========== FASE 2: Sistemas ==========
+    // ========== FASE 3: WebSocket ==========
+    private broadcastFn: BroadcastFn | null = null;
+    private onGameEnd: OnGameEndFn | null = null;
+
+    // ========== Sistemas de Jogo ==========
     private physicsSystem: PhysicsSystem;
     private combatSystem: CombatSystem;
     private entities: GameEntity[];
@@ -99,8 +125,13 @@ export class GameRoom {
 
     constructor(roomId: string, config?: GameRoomConfig) {
         this.roomId = roomId;
-        this.config = { ...DEFAULT_CONFIG, ...config };
+        const { broadcastFn, onGameEnd, ...restConfig } = config || {};
+        this.config = { ...DEFAULT_CONFIG, ...restConfig };
         this.tickDuration = 1000 / this.config.tickRate; // 50ms para 20Hz
+
+        // Callbacks WebSocket
+        this.broadcastFn = broadcastFn ?? null;
+        this.onGameEnd = onGameEnd ?? null;
 
         // Inicializar sistemas
         this.physicsSystem = new PhysicsSystem();
@@ -267,13 +298,38 @@ export class GameRoom {
 
         this.entities.push(entity);
 
-        console.log(
-            `[GameRoom ${this.roomId}] ✨ Spawn: ${entityId} | ` +
-            `Owner: player${playerIndex} | Pos: (${x}, ${y}) | ` +
-            `HP: ${finalStats.maxHp} | DMG: ${finalStats.damage}`
-        );
+        if (this.config.verboseLogging) {
+            console.log(
+                `[GameRoom ${this.roomId}] ✨ Spawn: ${entityId} | ` +
+                `Owner: player${playerIndex} | Pos: (${x}, ${y}) | ` +
+                `HP: ${finalStats.maxHp} | DMG: ${finalStats.damage}`
+            );
+        }
+
+        // FASE 3: Broadcast de spawn para clientes
+        this.broadcastEntitySpawned(entity);
 
         return entity;
+    }
+
+    /**
+     * Faz broadcast de entidade spawnada para os clientes.
+     */
+    private broadcastEntitySpawned(entity: GameEntity): void {
+        if (!this.broadcastFn) return;
+
+        const spawnData: EntitySpawnData = {
+            id: entity.id,
+            ownerId: entity.ownerId,
+            unitId: entity.unitId,
+            maxHp: entity.stats.maxHp,
+            position: { ...entity.position },
+        };
+
+        this.broadcastFn({
+            type: S2CMessageType.ENTITY_SPAWNED,
+            entity: spawnData,
+        });
     }
 
     /**
@@ -367,13 +423,12 @@ export class GameRoom {
         this.gameState.entities = this.entities.map((e) => e.toSnapshot());
 
         // --------------------------------------------
-        // FASE 8: Broadcast de Estado (Placeholder)
+        // FASE 8: Broadcast de Estado via WebSocket
         // --------------------------------------------
-        // TODO: Enviar snapshot comprimido para clientes via WebSocket
-        // this.broadcastState();
+        this.broadcastGameTick();
 
         // Log de debug (a cada 20 ticks = 1 segundo)
-        if (this.gameState.tick % 20 === 0) {
+        if (this.config.verboseLogging && this.gameState.tick % 20 === 0) {
             const elapsed = Math.floor((Date.now() - this.gameState.startTime) / 1000);
             const stats = this.combatSystem.getStats(this.entities);
             console.log(
@@ -383,6 +438,41 @@ export class GameRoom {
                 `Entidades: P1=${stats.player1Alive} P2=${stats.player2Alive}`
             );
         }
+    }
+
+    /**
+     * Envia GAME_TICK para todos os clientes da sala.
+     */
+    private broadcastGameTick(): void {
+        if (!this.broadcastFn) return;
+
+        // Construir deltas de entidades (formato comprimido)
+        const entities: EntityDelta[] = this.entities.map((e) => ({
+            id: e.id,
+            x: Math.round(e.position.x * 100) / 100, // 2 decimais
+            y: Math.round(e.position.y * 100) / 100,
+            hp: e.stats.hp,
+            s: stateToCode(e.state),
+        }));
+
+        // Construir deltas de torres
+        const towers: TowerDelta[] = this.gameState.towers.map((t) => ({
+            id: t.id,
+            hp: t.health,
+        }));
+
+        const payload: GameTickPayload = {
+            tick: this.gameState.tick,
+            mana1: Math.round(this.gameState.mana.player1 * 10) / 10,
+            mana2: Math.round(this.gameState.mana.player2 * 10) / 10,
+            entities,
+            towers,
+        };
+
+        this.broadcastFn({
+            type: S2CMessageType.GAME_TICK,
+            payload,
+        });
     }
 
     /**
@@ -424,8 +514,8 @@ export class GameRoom {
 
         // Verificar tempo limite
         if (elapsed >= maxDurationMs) {
-            this.stop('Tempo limite atingido');
-            // TODO: Determinar vencedor por HP de torres
+            const winnerId = this.determineWinnerByTowers();
+            this.endGame(winnerId, 'Tempo limite atingido');
             return;
         }
 
@@ -434,13 +524,36 @@ export class GameRoom {
         const p2Core = this.gameState.towers.find((t) => t.id === 't2_core');
 
         if (p1Core && p1Core.health <= 0) {
-            this.stop('Player 2 venceu! Core do Player 1 destruído.');
+            this.endGame('player2', 'Core do Player 1 destruído');
             return;
         }
 
         if (p2Core && p2Core.health <= 0) {
-            this.stop('Player 1 venceu! Core do Player 2 destruído.');
+            this.endGame('player1', 'Core do Player 2 destruído');
             return;
+        }
+    }
+
+    /**
+     * Determina vencedor por HP de torres.
+     */
+    private determineWinnerByTowers(): string {
+        const p1Towers = this.gameState.towers.filter((t) => t.ownerId === 'player1');
+        const p2Towers = this.gameState.towers.filter((t) => t.ownerId === 'player2');
+
+        const p1TotalHp = p1Towers.reduce((sum, t) => sum + t.health, 0);
+        const p2TotalHp = p2Towers.reduce((sum, t) => sum + t.health, 0);
+
+        return p1TotalHp >= p2TotalHp ? 'player1' : 'player2';
+    }
+
+    /**
+     * Encerra o jogo e notifica callbacks.
+     */
+    private endGame(winnerId: string, reason: string): void {
+        this.stop(reason);
+        if (this.onGameEnd) {
+            this.onGameEnd(winnerId, reason);
         }
     }
 
@@ -486,5 +599,49 @@ export class GameRoom {
             playersConnected: (this.player1 ? 1 : 0) + (this.player2 ? 1 : 0),
             entitiesAlive: this.entities.filter((e) => e.isAlive()).length,
         };
+    }
+
+    // ============================================
+    // FASE 3: MÉTODOS WEBSOCKET
+    // ============================================
+
+    /**
+     * Retorna o índice do jogador pelo socketId.
+     */
+    public getPlayerIndex(socketId: string): 1 | 2 | null {
+        if (this.player1?.playerId === socketId) return 1;
+        if (this.player2?.playerId === socketId) return 2;
+        return null;
+    }
+
+    /**
+     * Processa requisição de spawn de carta.
+     * Chamado pelo SocketManager quando recebe SPAWN_CARD.
+     */
+    public handleSpawnRequest(
+        playerIndex: 1 | 2,
+        cardIndex: number,
+        x: number,
+        y: number
+    ): boolean {
+        // TODO: Validar cardIndex contra o deck do jogador
+        // TODO: Verificar mana suficiente
+        // TODO: Validar posição dentro da área permitida
+
+        // Por agora, usar unidade padrão para teste
+        const testUnits = ['knight_base', 'archer_base', 'mage_base'];
+        const unitId = testUnits[cardIndex % testUnits.length];
+
+        const entity = this.spawnUnit(playerIndex, unitId, x, y);
+        return entity !== null;
+    }
+
+    /**
+     * Faz broadcast de uma mensagem para os clientes da sala.
+     */
+    public broadcast(message: S2CMessage): void {
+        if (this.broadcastFn) {
+            this.broadcastFn(message);
+        }
     }
 }

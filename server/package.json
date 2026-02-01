@@ -20,11 +20,15 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.19.7",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }

@@ -2,7 +2,7 @@
  * Magic Royale - Server Entry Point
  *
  * Ponto de entrada do servidor de jogo.
- * FASE 2: Demonstração de spawn e combate entre unidades.
+ * FASE 3: Servidor WebSocket Multiplayer Online.
  *
  * @module server/index
  */

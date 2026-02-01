@@ -2,160 +2,73 @@
  * Magic Royale - Server Entry Point
  * 
  * Ponto de entrada do servidor de jogo.
- * FASE 2: Demonstração de spawn e combate entre unidades.
+ * FASE 3: Servidor WebSocket Multiplayer Online.
  * 
  * @module server/index
  */
 
-import { GameRoom } from '../core/game/game-room.js';
-import { validateDeck, calculateCardCostByIds } from '../core/validation/deck-validator.js';
-import { loadUnits, loadItems } from '../data/loader.js';
-import type { PlayerDeck, PlayerInventory } from '../core/types/deck.js';
+import { SocketManager } from './socket-manager.js';
 
 console.log('====================================');
-console.log('   🎮 MAGIC ROYALE SERVER v0.2.0   ');
-console.log('   FASE 2: Shadow Simulation       ');
+console.log('   🎮 MAGIC ROYALE SERVER v0.3.0   ');
+console.log('   FASE 3: Real-Time WebSocket     ');
 console.log('====================================\n');
 
 // --------------------------------------------
-// 1. Carregar dados do catálogo
+// 1. Configuração do Servidor
 // --------------------------------------------
-console.log('[Boot] Carregando catálogo de unidades e itens...\n');
-const units = loadUnits();
-const items = loadItems();
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const TICK_RATE = parseInt(process.env.TICK_RATE || '20', 10);
+const MAX_GAME_DURATION = parseInt(process.env.MAX_DURATION || '180', 10);
 
-console.log('\n📋 Unidades disponíveis:');
-for (const [id, unit] of units) {
-    console.log(`   - ${unit.name} (${id}): ${unit.tags.join(', ')} | Custo: ${unit.manaCost} mana`);
-}
-
-console.log('\n⚔️ Itens disponíveis:');
-for (const [id, item] of items) {
-    const forbidden = item.requirements.forbiddenTags.length > 0
-        ? `❌ ${item.requirements.forbiddenTags.join(', ')}`
-        : '';
-    console.log(`   - ${item.name} (${id}): Slot=${item.slot} | +${item.manaWeight} mana ${forbidden}`);
-}
+console.log('[Config] Configurações do servidor:');
+console.log(`   📡 Porta: ${PORT}`);
+console.log(`   ⏱️ Tick Rate: ${TICK_RATE}Hz`);
+console.log(`   ⏳ Duração Máxima: ${MAX_GAME_DURATION}s\n`);
 
 // --------------------------------------------
-// 2. Demonstração: Validação de Deck
+// 2. Inicializar SocketManager
 // --------------------------------------------
-console.log('\n\n====================================');
-console.log('   📝 TESTE DE VALIDAÇÃO DE DECK   ');
-console.log('====================================\n');
-
-// Inventário mock do jogador
-const mockInventory: PlayerInventory = {
-    playerId: 'player_test',
-    unlockedUnits: ['knight_base', 'archer_base', 'mage_base'],
-    ownedItems: ['sword_flame_t1', 'longbow_t2', 'steel_plate_t2', 'staff_ice_t1', 'shadow_relic'],
-};
-
-// Deck VÁLIDO
-const validDeck: PlayerDeck = {
-    deckId: 'deck_valid_01',
-    playerId: 'player_test',
-    deckName: 'Deck de Teste Válido',
-    cards: [
-        {
-            slotIndex: 0,
-            baseUnitId: 'knight_base',
-            equippedItems: ['sword_flame_t1', 'steel_plate_t2'], // Válido: Knight é HUMAN/STEEL
-        },
-        {
-            slotIndex: 1,
-            baseUnitId: 'archer_base',
-            equippedItems: ['longbow_t2'], // Válido: Archer é RANGED
-        },
-    ],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-};
-
-console.log('📗 Testando deck VÁLIDO:');
-const validResult = validateDeck(validDeck, mockInventory);
-console.log(`   Resultado: ${validResult.isValid ? '✅ VÁLIDO' : '❌ INVÁLIDO'}`);
-if (validResult.errors.length > 0) {
-    for (const err of validResult.errors) {
-        console.log(`   - [${err.code}] ${err.message}`);
-    }
-}
-
-// Calcular custos
-console.log('\n   💰 Custos das cartas:');
-for (const card of validDeck.cards) {
-    const cost = calculateCardCostByIds(card.baseUnitId, card.equippedItems);
-    console.log(`      - Carta ${card.slotIndex}: ${cost} mana`);
-}
-
-// --------------------------------------------
-// 3. FASE 2: Demonstração de Combate
-// --------------------------------------------
-console.log('\n\n====================================');
-console.log('   ⚔️ TESTE DE COMBATE (Fase 2)    ');
-console.log('====================================\n');
-
-const combatRoom = new GameRoom('room_combat_test', {
-    tickRate: 20,
-    maxDuration: 10, // 10 segundos de demo
-    verboseLogging: true,
+const socketManager = SocketManager.getInstance({
+    port: PORT,
+    tickRate: TICK_RATE,
+    maxGameDuration: MAX_GAME_DURATION,
+    verbose: true,
 });
 
-// Adicionar jogadores mock
-combatRoom.addPlayer({ playerId: 'player1', deckId: 'deck_001' }, 1);
-combatRoom.addPlayer({ playerId: 'player2', deckId: 'deck_002' }, 2);
+// --------------------------------------------
+// 3. Graceful Shutdown
+// --------------------------------------------
+function gracefulShutdown(signal: string): void {
+    console.log(`\n[Server] Recebido ${signal}. Encerrando...`);
+    socketManager.stop();
+    process.exit(0);
+}
 
-// Spawnar unidades inimigas próximas para testar combate
-console.log('\n🎲 Spawnando unidades para combate...\n');
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-// Player 1: Cavaleiro na posição (10, 10)
-combatRoom.spawnUnit(1, 'knight_base', 10, 10, ['sword_flame_t1']);
+// --------------------------------------------
+// 4. Stats periódicas
+// --------------------------------------------
+setInterval(() => {
+    const stats = socketManager.getStats();
+    console.log(
+        `[Stats] Conectados: ${stats.connected} | ` +
+        `Fila: ${stats.inQueue} | ` +
+        `Em Jogo: ${stats.inGame} | ` +
+        `Salas: ${stats.rooms}`
+    );
+}, 30000); // A cada 30 segundos
 
-// Player 2: Arqueira na posição (10, 18) - 8 unidades de distância
-combatRoom.spawnUnit(2, 'archer_base', 10, 18, ['longbow_t2']);
+// --------------------------------------------
+// 5. Iniciar Servidor
+// --------------------------------------------
+console.log('[Server] Iniciando servidor WebSocket...\n');
+socketManager.start();
 
-// Player 1: Mago Solar na posição (12, 10)
-combatRoom.spawnUnit(1, 'mage_base', 12, 10);
-
-// Player 2: Cavaleiro na posição (12, 17)
-combatRoom.spawnUnit(2, 'knight_base', 12, 17);
-
-console.log('\n📍 Configuração inicial:');
-console.log('   Player 1: Cavaleiro (10,10) + Mago (12,10)');
-console.log('   Player 2: Arqueira (10,18) + Cavaleiro (12,17)');
-console.log('   Distâncias iniciais: ~8 unidades\n');
-
-// Iniciar o game loop
-combatRoom.start();
-
-console.log('⏱️ Rodando simulação por 10 segundos...\n');
-console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-// Parar após 10 segundos de demonstração
-setTimeout(() => {
-    combatRoom.stop('Demo de combate finalizada');
-
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('\n====================================');
-    console.log('   ✅ FASE 2 DEMO COMPLETA!');
-    console.log('====================================');
-
-    console.log('\n📊 Estado final:');
-    const info = combatRoom.getInfo();
-    console.log(`   Ticks processados: ${info.tick}`);
-    console.log(`   Entidades vivas: ${info.entitiesAlive}`);
-
-    const stats = combatRoom.getCombatStats();
-    console.log(`   Player 1 vivos: ${stats.player1Alive}`);
-    console.log(`   Player 2 vivos: ${stats.player2Alive}`);
-    console.log(`   Total mortos: ${stats.totalDead}`);
-
-    console.log('\n🎯 Verificação de requisitos:');
-    console.log('   ✅ Sistema de física vetorial implementado');
-    console.log('   ✅ Classe GameEntity com FSM funcionando');
-    console.log('   ✅ Colisões círculo-círculo com repulsão');
-    console.log('   ✅ Combate com busca de alvo e cooldown');
-    console.log('   ✅ Logs de movimento, ataque e dano');
-
-    console.log('\n[Server] Use Ctrl+C para encerrar.\n');
-}, 10000);
+console.log('');
+console.log('🎯 Servidor pronto para conexões!');
+console.log('   Para testar: npx tsx scripts/test-client.ts');
+console.log('');
+console.log('[Server] Use Ctrl+C para encerrar.\n');

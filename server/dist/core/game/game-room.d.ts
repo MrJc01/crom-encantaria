@@ -4,13 +4,14 @@
  * Gerencia uma instância de partida 1v1.
  * Implementa o tick loop a 20Hz para simulação autoritativa.
  *
- * FASE 2: Integração com Physics, Entity e Combat systems.
+ * FASE 3: Integração com WebSocket e broadcast de estado.
  *
  * @module core/game/game-room
  */
 import { Vector2D } from './physics.js';
 import { GameEntity, EntitySnapshot } from './entity.js';
 import { CombatStats } from './combat.js';
+import { S2CMessage } from '../net/protocol.js';
 /**
  * Estado de uma torre.
  */
@@ -36,12 +37,20 @@ export interface GameState {
     isRunning: boolean;
 }
 /**
- * Conexão de um jogador (placeholder para WebSocket futuro).
+ * Conexão de um jogador.
  */
 export interface PlayerConnection {
     playerId: string;
     deckId: string;
 }
+/**
+ * Callback para broadcast de mensagens.
+ */
+export type BroadcastFn = (message: S2CMessage) => void;
+/**
+ * Callback para fim de jogo.
+ */
+export type OnGameEndFn = (winnerId: string, reason: string) => void;
 /**
  * Configuração do GameRoom.
  */
@@ -56,6 +65,10 @@ export interface GameRoomConfig {
     manaRegenRate?: number;
     /** Se true, loga detalhes de combate */
     verboseLogging?: boolean;
+    /** Callback para broadcast de mensagens (WebSocket) */
+    broadcastFn?: BroadcastFn;
+    /** Callback chamado quando a partida termina */
+    onGameEnd?: OnGameEndFn;
 }
 /**
  * Classe que gerencia uma sala de jogo (partida 1v1).
@@ -75,6 +88,8 @@ export declare class GameRoom {
     private config;
     private tickInterval;
     private tickDuration;
+    private broadcastFn;
+    private onGameEnd;
     private physicsSystem;
     private combatSystem;
     private entities;
@@ -117,6 +132,10 @@ export declare class GameRoom {
      */
     spawnUnit(playerIndex: 1 | 2, unitId: string, x: number, y: number, equippedItems?: string[]): GameEntity | null;
     /**
+     * Faz broadcast de entidade spawnada para os clientes.
+     */
+    private broadcastEntitySpawned;
+    /**
      * Calcula os stats finais somando stats base com modificadores de itens.
      * @param baseStats Stats base da unidade
      * @param equippedItems IDs dos itens equipados
@@ -129,6 +148,10 @@ export declare class GameRoom {
      */
     private tick;
     /**
+     * Envia GAME_TICK para todos os clientes da sala.
+     */
+    private broadcastGameTick;
+    /**
      * Atualiza a mana dos jogadores.
      */
     private updateMana;
@@ -140,6 +163,14 @@ export declare class GameRoom {
      * Verifica condições de vitória.
      */
     private checkWinCondition;
+    /**
+     * Determina vencedor por HP de torres.
+     */
+    private determineWinnerByTowers;
+    /**
+     * Encerra o jogo e notifica callbacks.
+     */
+    private endGame;
     /**
      * Retorna o estado atual do jogo (para debug ou testes).
      */
@@ -162,5 +193,18 @@ export declare class GameRoom {
         playersConnected: number;
         entitiesAlive: number;
     };
+    /**
+     * Retorna o índice do jogador pelo socketId.
+     */
+    getPlayerIndex(socketId: string): 1 | 2 | null;
+    /**
+     * Processa requisição de spawn de carta.
+     * Chamado pelo SocketManager quando recebe SPAWN_CARD.
+     */
+    handleSpawnRequest(playerIndex: 1 | 2, cardIndex: number, x: number, y: number): boolean;
+    /**
+     * Faz broadcast de uma mensagem para os clientes da sala.
+     */
+    broadcast(message: S2CMessage): void;
 }
 //# sourceMappingURL=game-room.d.ts.map
