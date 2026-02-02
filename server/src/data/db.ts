@@ -50,8 +50,9 @@ export class SimpleDB {
         // Seed Players
         if (!fs.existsSync(playersPath)) {
             const seedPlayers: PlayerModel[] = [
-                { id: 'hero_1', name: 'Hero One', inventory: ['archers', 'knights', 'dragon', 'fireball', 'arrows', 'giant', 'pecca', 'wizard', 'minions'] },
-                { id: 'hero_2', name: 'Hero Two', inventory: ['archers', 'knights', 'dragon', 'fireball', 'arrows', 'giant', 'pecca', 'wizard', 'minions'] }
+                { id: 'hero_1', name: 'Hero One', inventory: ['archer_base', 'knight_base', 'mage_solar'] },
+                { id: 'hero_2', name: 'Hero Two', inventory: ['archer_base', 'knight_base', 'mage_solar'] }
+
             ];
             fs.writeFileSync(playersPath, JSON.stringify(seedPlayers, null, 2));
             console.log('[SimpleDB] players.json criado com seed data.');
@@ -64,13 +65,15 @@ export class SimpleDB {
                     id: 'deck_h1_default',
                     playerId: 'hero_1',
                     name: 'Starter Deck',
-                    cards: ['archers', 'knights', 'dragon', 'fireball', 'arrows', 'giant', 'pecca', 'wizard']
+                    cards: ['archer_base', 'knight_base', 'mage_solar', 'archer_base', 'knight_base', 'mage_solar', 'archer_base', 'knight_base']
+
                 },
                 {
                     id: 'deck_h2_default',
                     playerId: 'hero_2',
                     name: 'Starter Deck',
-                    cards: ['archers', 'knights', 'dragon', 'fireball', 'arrows', 'giant', 'pecca', 'wizard']
+                    cards: ['archer_base', 'knight_base', 'mage_solar', 'archer_base', 'knight_base', 'mage_solar', 'archer_base', 'knight_base']
+
                 }
             ];
             fs.writeFileSync(decksPath, JSON.stringify(seedDecks, null, 2));

@@ -72,6 +72,10 @@ export declare class SocketManager {
      */
     private handleDisconnect;
     /**
+     * Processa login do jogador.
+     */
+    private handleLogin;
+    /**
      * Adiciona cliente à fila de matchmaking.
      */
     private handleQueueJoin;

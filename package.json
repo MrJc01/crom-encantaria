@@ -5,7 +5,8 @@
     "description": "Magic Royale - Crom Encantaria Monorepo",
     "workspaces": [
         "client",
-        "server"
+        "server",
+        "shared"
     ],
     "scripts": {
         "bootstrap": "npm install --workspaces",

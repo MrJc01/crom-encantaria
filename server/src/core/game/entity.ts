@@ -7,23 +7,17 @@
  * @module core/game/entity
  */
 
-import { Vector2D, getDistance } from './physics.js';
+import { getDistance } from './physics.js';
+import { EntityState } from '@crom/shared';
+import type { Vector2D, EntitySnapshot } from '@crom/shared';
+export { EntityState };
+export type { Vector2D, EntitySnapshot };
 
-/**
- * Estados possíveis de uma entidade durante a partida.
- */
-export enum EntityState {
-    /** Sem alvo, parada */
-    IDLE = 'IDLE',
-    /** Movendo em direção ao alvo */
-    MOVING = 'MOVING',
-    /** Em alcance, atacando */
-    ATTACKING = 'ATTACKING',
-    /** Aguardando cooldown entre ataques */
-    COOLDOWN = 'COOLDOWN',
-    /** Morta, aguardando remoção */
-    DEAD = 'DEAD',
-}
+
+
+
+
+
 
 /**
  * Estatísticas de uma entidade (após aplicar equipamentos).
@@ -39,9 +33,12 @@ export interface EntityStats {
     attackSpeed: number;
     /** Distância de ataque (unidades do grid) */
     range: number;
+    /** Distância de visão/agressividade */
+    aggroRange: number;
     /** Velocidade de movimento (unidades por segundo) */
     moveSpeed: number;
 }
+
 
 /**
  * Configuração para criar uma nova entidade.
@@ -53,7 +50,9 @@ export interface EntityConfig {
     position: Vector2D;
     stats: EntityStats;
     radius?: number;
+    isTower?: boolean;
 }
+
 
 /**
  * Representa uma unidade viva na arena.
@@ -76,6 +75,8 @@ export class GameEntity {
 
     // ========== Stats ==========
     public stats: EntityStats;
+    public readonly isTower: boolean;
+
 
     // ========== Estado FSM ==========
     public state: EntityState;
@@ -97,14 +98,16 @@ export class GameEntity {
         this.position = { ...config.position };
         this.radius = config.radius ?? 0.5;
         this.stats = { ...config.stats };
+        this.isTower = config.isTower ?? false;
 
         this.state = EntityState.IDLE;
         this.targetId = null;
         this.targetPosition = null;
         this.lastAttackTime = 0;
         this.isMoving = false;
-        this.moveSpeed = this.stats.moveSpeed;
+        this.moveSpeed = this.isTower ? 0 : this.stats.moveSpeed;
     }
+
 
     /**
      * Aplica dano à entidade.
@@ -206,8 +209,12 @@ export class GameEntity {
             return;
         }
 
-        // Atualizar posição do alvo
-        this.updateTargetPosition(target);
+        // Atualizar alvo se necessário
+        if (target.id !== this.targetId) {
+            this.targetId = target.id;
+        }
+        this.targetPosition = { ...target.position };
+
 
         const inRange = this.isInRange(target);
         const canAttack = this.canAttack(tickTime);
@@ -291,19 +298,7 @@ export class GameEntity {
     }
 }
 
-/**
- * Snapshot de entidade para sincronização com clientes.
- */
-export interface EntitySnapshot {
-    id: string;
-    ownerId: string;
-    unitId: string;
-    position: Vector2D;
-    hp: number;
-    maxHp: number;
-    state: EntityState;
-    targetId: string | null;
-}
+
 
 /**
  * Factory function para criar entidades.

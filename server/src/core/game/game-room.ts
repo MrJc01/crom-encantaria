@@ -9,24 +9,31 @@
  * @module core/game/game-room
  */
 
-import { PhysicsSystem, Vector2D } from './physics.js';
-import { GameEntity, EntityStats, EntitySnapshot, createEntity } from './entity.js';
+import { PhysicsSystem } from './physics.js';
+import type { Vector2D } from './physics.js';
+import { GameEntity, createEntity } from './entity.js';
+import type { EntityStats, EntitySnapshot } from './entity.js';
+
 import { CombatSystem, CombatStats } from './combat.js';
 import { getUnitById, getItemById } from '../../data/loader.js';
 import { calculateCardCostByIds } from '../validation/deck-validator.js';
 import type { UnitBaseStats } from '../types/unit.js';
 import type { ItemStatsModifier } from '../types/item.js';
 import type { PlayerDeck, CardConfig } from '../types/deck.js';
+
 import {
-    S2CMessage,
     S2CMessageType,
+    ErrorCode,
+    stateToCode,
+} from '../net/protocol.js';
+import type {
+    S2CMessage,
     EntityDelta,
     TowerDelta,
     GameTickPayload,
     EntitySpawnData,
-    ErrorCode,
-    stateToCode,
 } from '../net/protocol.js';
+
 
 // ============================================
 // CONSTANTES DE ANTI-CHEAT
@@ -57,10 +64,11 @@ export interface GameState {
     tick: number;
     mana: { player1: number; player2: number };
     entities: EntitySnapshot[];
-    towers: TowerState[];
+    entities: EntitySnapshot[];
     startTime: number;
     isRunning: boolean;
 }
+
 
 /**
  * Conexão de um jogador.
@@ -166,6 +174,10 @@ export class GameRoom {
         // Inicializar estado do jogo
         this.gameState = this.createInitialState();
 
+        // Inicializar torres como entidades
+        const towers = this.createInitialTowers();
+        this.entities.push(...towers);
+
         console.log(`[GameRoom] Sala "${roomId}" criada. TickRate: ${this.config.tickRate}Hz`);
     }
 
@@ -177,33 +189,49 @@ export class GameRoom {
             tick: 0,
             mana: {
                 player1: this.config.initialMana,
+                player1: this.config.initialMana,
                 player2: this.config.initialMana,
             },
             entities: [],
-            towers: this.createInitialTowers(),
             startTime: 0,
             isRunning: false,
         };
     }
 
     /**
-     * Cria as torres iniciais do mapa.
+     * Cria as torres iniciais como GameEntity.
      */
-    private createInitialTowers(): TowerState[] {
-        // Layout baseado na documentação:
-        // Player1 na parte inferior, Player2 na parte superior
-        // Duas torres laterais + core central para cada jogador
-        return [
+    private createInitialTowers(): GameEntity[] {
+        const towerConfigs = [
             // Torres do Player 1 (inferior)
-            { id: 't1_left', ownerId: 'player1', position: { x: 5, y: 5 }, health: 2500, maxHealth: 2500 },
-            { id: 't1_right', ownerId: 'player1', position: { x: 25, y: 5 }, health: 2500, maxHealth: 2500 },
-            { id: 't1_core', ownerId: 'player1', position: { x: 15, y: 2 }, health: 4000, maxHealth: 4000 },
+            { id: 't1_left', ownerId: 'player1' as const, position: { x: 5, y: 5 }, hp: 2500, radius: 1.5, type: 'tower_small' },
+            { id: 't1_right', ownerId: 'player1' as const, position: { x: 25, y: 5 }, hp: 2500, radius: 1.5, type: 'tower_small' },
+            { id: 't1_core', ownerId: 'player1' as const, position: { x: 15, y: 2 }, hp: 4000, radius: 2.0, type: 'tower_core' },
             // Torres do Player 2 (superior)
-            { id: 't2_left', ownerId: 'player2', position: { x: 5, y: 35 }, health: 2500, maxHealth: 2500 },
-            { id: 't2_right', ownerId: 'player2', position: { x: 25, y: 35 }, health: 2500, maxHealth: 2500 },
-            { id: 't2_core', ownerId: 'player2', position: { x: 15, y: 38 }, health: 4000, maxHealth: 4000 },
+            { id: 't2_left', ownerId: 'player2' as const, position: { x: 5, y: 35 }, hp: 2500, radius: 1.5, type: 'tower_small' },
+            { id: 't2_right', ownerId: 'player2' as const, position: { x: 25, y: 35 }, hp: 2500, radius: 1.5, type: 'tower_small' },
+            { id: 't2_core', ownerId: 'player2' as const, position: { x: 15, y: 38 }, hp: 4000, radius: 2.0, type: 'tower_core' },
         ];
+
+        return towerConfigs.map(cfg => createEntity({
+            id: cfg.id,
+            ownerId: cfg.ownerId,
+            unitId: cfg.type,
+            position: cfg.position,
+            isTower: true,
+            stats: {
+                hp: cfg.hp,
+                maxHp: cfg.hp,
+                damage: 0, // Torres ainda não atacam por enquanto (foco no movimento dos pés)
+                attackSpeed: 0,
+                range: 0,
+                aggroRange: 0,
+                moveSpeed: 0
+            },
+            radius: cfg.radius
+        }));
     }
+
 
     /**
      * Adiciona um jogador à sala.
@@ -243,11 +271,40 @@ export class GameRoom {
         this.gameState.isRunning = true;
         this.gameState.startTime = Date.now();
 
+        // Broadcast torres iniciais para o cliente renderizar
+        this.entities.filter(e => e.isTower).forEach(tower => {
+            this.broadcastTowerSpawned(tower);
+        });
+
+
         // Iniciar tick loop
         this.tickInterval = setInterval(() => {
             this.tick();
         }, this.tickDuration);
     }
+
+    /**
+     * Faz broadcast de uma torre como se fosse uma entidade para reaproveitamento no renderer.
+     */
+
+    private broadcastTowerSpawned(tower: GameEntity): void {
+        if (!this.broadcastFn) return;
+
+        const spawnData: EntitySpawnData = {
+            id: tower.id,
+            ownerId: tower.ownerId,
+            unitId: tower.unitId,
+            maxHp: tower.stats.maxHp,
+            position: { ...tower.position },
+        };
+
+
+        this.broadcastFn({
+            type: S2CMessageType.ENTITY_SPAWNED,
+            entity: spawnData,
+        });
+    }
+
 
     /**
      * Para o game loop.
@@ -320,6 +377,7 @@ export class GameRoom {
             radius: 0.5, // Raio padrão
         });
 
+
         this.entities.push(entity);
 
         if (this.config.verboseLogging) {
@@ -378,7 +436,9 @@ export class GameRoom {
         let damage = baseStats.damage;
         let attackSpeed = baseStats.attackSpeed;
         let range = baseStats.range;
+        let aggroRange = baseStats.aggroRange;
         let moveSpeed = baseStats.moveSpeed;
+
 
         // Somar modificadores de cada item
         for (const itemId of equippedItems) {
@@ -400,9 +460,11 @@ export class GameRoom {
             damage: Math.max(1, damage),
             attackSpeed: Math.max(0.1, attackSpeed),
             range: Math.max(0.5, range),
+            aggroRange: Math.max(1.0, aggroRange),
             moveSpeed: Math.max(0.5, moveSpeed),
         };
     }
+
 
     // ============================================
     // TICK LOOP (Atualizado para Fase 2)
@@ -486,11 +548,14 @@ export class GameRoom {
             s: stateToCode(e.state),
         }));
 
-        // Construir deltas de torres
-        const towers: TowerDelta[] = this.gameState.towers.map((t) => ({
-            id: t.id,
-            hp: t.health,
-        }));
+        // Construir deltas de torres (unidades com flag isTower)
+        const towers: TowerDelta[] = this.entities
+            .filter(e => e.isTower)
+            .map((t) => ({
+                id: t.id,
+                hp: t.stats.hp,
+            }));
+
 
         const payload: GameTickPayload = {
             tick: this.gameState.tick,
@@ -551,32 +616,34 @@ export class GameRoom {
         }
 
         // Verificar destruição do Core
-        const p1Core = this.gameState.towers.find((t) => t.id === 't1_core');
-        const p2Core = this.gameState.towers.find((t) => t.id === 't2_core');
+        const p1Core = this.entities.find((t) => t.id === 't1_core');
+        const p2Core = this.entities.find((t) => t.id === 't2_core');
 
-        if (p1Core && p1Core.health <= 0) {
+        if (p1Core && p1Core.stats.hp <= 0) {
             this.endGame('player2', 'Core do Player 1 destruído');
             return;
         }
 
-        if (p2Core && p2Core.health <= 0) {
+        if (p2Core && p2Core.stats.hp <= 0) {
             this.endGame('player1', 'Core do Player 2 destruído');
             return;
         }
+
     }
 
     /**
      * Determina vencedor por HP de torres.
      */
     private determineWinnerByTowers(): string {
-        const p1Towers = this.gameState.towers.filter((t) => t.ownerId === 'player1');
-        const p2Towers = this.gameState.towers.filter((t) => t.ownerId === 'player2');
+        const p1Towers = this.entities.filter((t) => t.isTower && t.ownerId === 'player1');
+        const p2Towers = this.entities.filter((t) => t.isTower && t.ownerId === 'player2');
 
-        const p1TotalHp = p1Towers.reduce((sum, t) => sum + t.health, 0);
-        const p2TotalHp = p2Towers.reduce((sum, t) => sum + t.health, 0);
+        const p1TotalHp = p1Towers.reduce((sum, t) => sum + t.stats.hp, 0);
+        const p2TotalHp = p2Towers.reduce((sum, t) => sum + t.stats.hp, 0);
 
         return p1TotalHp >= p2TotalHp ? 'player1' : 'player2';
     }
+
 
     /**
      * Encerra o jogo e notifica callbacks.

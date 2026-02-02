@@ -1,19 +1,15 @@
+
 <script setup lang="ts">
-import * as THREE from 'three';
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useGameStore } from '../stores/game';
-import { ThreeScene } from '../three/ThreeScene';
-import { WorldManager } from '../three/WorldManager';
-import { EntityProxy } from '../three/EntityProxy';
+import { WorldRenderer2D } from '../renderer/WorldRenderer2D';
 import CardComponent from '../components/CardComponent.vue';
 
 const gameStore = useGameStore();
 const gameCanvas = ref<HTMLElement | null>(null);
 
-// Three.js
-let threeScene: ThreeScene | null = null;
-let worldManager: WorldManager | null = null;
-const entityProxies = new Map<string, EntityProxy>();
+// 2D Renderer
+let worldRenderer: WorldRenderer2D | null = null;
 
 // Interaction State
 const selectedIndex = ref<number | null>(null);
@@ -27,107 +23,99 @@ function handleCardSelect(index: number) {
 }
 
 function onCanvasClick(e: MouseEvent) {
-    if (selectedIndex.value === null) {
-        return;
-    }
-    if (!threeScene || !worldManager?.floor) {
+    if (selectedIndex.value === null || !worldRenderer) {
         return;
     }
     
     const rect = gameCanvas.value!.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
     
-    console.log("Raycast NDC:", x.toFixed(2), y.toFixed(2));
-
-    const intersection = threeScene.getIntersection(x, y, [worldManager.floor]);
+    const logical = worldRenderer.getViewport().toLogical(px, py);
     
-    if (intersection) {
-        const gx = intersection.point.x;
-        const gy = intersection.point.z;
-        console.log("Intersection found at:", gx.toFixed(2), gy.toFixed(2));
+    console.log("Canvas Click (Logical):", logical.x.toFixed(2), logical.y.toFixed(2));
 
-        // Debug visual
-        const debugGeo = new THREE.SphereGeometry(0.5, 8, 8);
-        const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-        const debugMesh = new THREE.Mesh(debugGeo, debugMat);
-        debugMesh.position.copy(intersection.point);
-        threeScene.scene.add(debugMesh);
-        setTimeout(() => threeScene?.scene.remove(debugMesh), 1000);
-
-        gameStore.spawnCard(selectedIndex.value, gx, gy);
-        selectedIndex.value = null;
-    }
+    // Spawn Request
+    gameStore.spawnCard(selectedIndex.value, logical.x, logical.y);
+    selectedIndex.value = null;
 }
 
-// 3D Logic
-onMounted(() => {
-    if (gameCanvas.value) {
-        threeScene = new ThreeScene(gameCanvas.value);
-        worldManager = new WorldManager(threeScene);
-        gameCanvas.value.addEventListener('click', onCanvasClick);
-        threeScene.start((delta) => {
-            entityProxies.forEach(entity => entity.update(delta));
-        });
+// Autoplay Logic (Step 4 preview)
+const isAutoplay = ref(new URLSearchParams(window.location.search).get('autoplay') === 'true');
+let autoplayInterval: any = null;
+
+function startAutoplay() {
+    if (!isAutoplay.value) return;
+    console.log("🎮 Autoplay Active");
+    autoplayInterval = setInterval(() => {
+        if (selectedIndex.value !== null) return; // Wait if one is somehow selected
         
-        // Initial zone show if data ready
-        if (gameStore.matchData) {
-            worldManager.showDeployZone(gameStore.matchData.you.playerIndex);
-            threeScene.setCameraPerspective(gameStore.matchData.you.playerIndex);
+        // Pick random card from hand (0-3)
+        const randIndex = Math.floor(Math.random() * 4);
+        
+        // Pick random position in my deploy zone
+        // P1: y [0-15], P2: y [25-40]
+        const playerIdx = gameStore.matchData?.you.playerIndex || 1;
+        const x = Math.random() * 30;
+        const y = playerIdx === 1 ? (Math.random() * 15) : (25 + Math.random() * 15);
+        
+        console.log(`[Autoplay] Spawning card ${randIndex} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+        gameStore.spawnCard(randIndex, x, y);
+    }, 3000);
+}
+
+onMounted(async () => {
+    if (gameCanvas.value) {
+        worldRenderer = new WorldRenderer2D(gameCanvas.value);
+        const playerIdx = gameStore.matchData?.you.playerIndex || 1;
+        if (playerIdx === 2) {
+            worldRenderer.getViewport().setFlipped(true);
+        }
+        
+        await worldRenderer.init();
+        gameCanvas.value.addEventListener('click', onCanvasClick);
+        
+        if (isAutoplay.value) {
+            startAutoplay();
         }
     }
 });
 
 onUnmounted(() => {
-    if (threeScene) {
-        threeScene.stop();
-        if (gameCanvas.value) {
-            gameCanvas.value.removeEventListener('click', onCanvasClick);
-        }
+    if (worldRenderer) {
+        worldRenderer.destroy();
     }
-    entityProxies.forEach(e => e.destroy());
-    entityProxies.clear();
+    if (gameCanvas.value) {
+        gameCanvas.value.removeEventListener('click', onCanvasClick);
+    }
+    if (autoplayInterval) {
+        clearInterval(autoplayInterval);
+    }
 });
 
 // Entity Sync
 watch(() => gameStore.lastTick, (tick) => {
-    if (!tick || !threeScene) return;
-    const activeIds = new Set<string>();
-    tick.entities.forEach(delta => {
-        activeIds.add(delta.id);
-        let proxy = entityProxies.get(delta.id);
-        if (!proxy) {
-            const spawnData = gameStore.entityRegistry.get(delta.id);
-            if (spawnData) {
-                proxy = new EntityProxy(spawnData.unitId, threeScene!, spawnData.position);
-                const isMyUnit = (spawnData.ownerId === gameStore.player?.id) || 
-                                 (gameStore.matchData?.you.playerIndex === 1 && spawnData.ownerId.includes('1')) || 
-                                 (gameStore.matchData?.you.playerIndex === 2 && spawnData.ownerId.includes('2'));
-                proxy.setColor(isMyUnit ? 0x4444ff : 0xff4444);
-                entityProxies.set(delta.id, proxy);
-            }
-        }
-        if (proxy) proxy.updateTarget({ x: delta.x, y: delta.y });
-    });
-    for (const [id, proxy] of entityProxies) {
-        if (!activeIds.has(id)) {
-            proxy.destroy();
-            entityProxies.delete(id);
-        }
-    }
+    if (!tick || !worldRenderer) return;
+    
+    // Sync entities
+    worldRenderer.updateEntities(tick.entities);
 });
+
+// Registry Watch for Spawns
+// The server sends ENTITY_SPAWNED once, which adds to gameStore.entityRegistry.
+// We need to ensure the renderer spawns it.
+// Registry Watch for Spawns
+watch(() => gameStore.entityRegistry.size, () => {
+    if (!worldRenderer) return;
+    gameStore.entityRegistry.forEach((data, _id) => {
+        worldRenderer?.spawnEntity(data);
+    });
+}, { immediate: true });
+
 
 const hand = computed(() => gameStore.currentDeck.slice(0, 4));
 const nextCard = computed(() => gameStore.currentDeck[4] || null);
 const timerSeconds = computed(() => Math.floor((gameStore.lastTick?.tick || 0) / 20));
-
-// Watch for match start to show zone
-watch(() => gameStore.matchData, (data) => {
-    if (data && worldManager && threeScene) {
-        worldManager.showDeployZone(data.you.playerIndex);
-        threeScene.setCameraPerspective(data.you.playerIndex);
-    }
-});
 
 // Auto-clear error
 watch(() => gameStore.lastError, (err) => {
@@ -141,6 +129,7 @@ watch(() => gameStore.lastError, (err) => {
 
 <template>
     <div class="relative w-screen h-screen bg-black overflow-hidden select-none">
+        <!-- New 2D Canvas Container -->
         <div ref="gameCanvas" class="w-full h-full"></div>
         
         <!-- HUD Overlay -->
@@ -153,8 +142,13 @@ watch(() => gameStore.lastError, (err) => {
                    <span class="uppercase">{{ gameStore.matchData?.opponent.playerId || 'Opponent' }}</span>
                 </div>
                 
-                <div class="bg-black bg-opacity-60 px-5 py-2 rounded-xl text-white font-black text-xl border-2 border-gray-600 shadow-2xl backdrop-blur-sm tabular-nums">
-                    {{ timerSeconds }}s
+                <div class="flex items-center gap-2">
+                    <div v-if="isAutoplay" class="bg-blue-600 px-3 py-1 rounded-lg text-white font-bold animate-pulse text-xs">
+                        AUTOPLAY ON
+                    </div>
+                    <div class="bg-black bg-opacity-60 px-5 py-2 rounded-xl text-white font-black text-xl border-2 border-gray-600 shadow-2xl backdrop-blur-sm tabular-nums">
+                        {{ timerSeconds }}s
+                    </div>
                 </div>
             </div>
 
@@ -215,8 +209,15 @@ watch(() => gameStore.lastError, (err) => {
             <!-- Active Selection Hint -->
             <div v-if="selectedIndex !== null" 
                  class="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-70 text-white px-6 py-3 rounded-2xl font-black italic uppercase tracking-widest border-2 border-royale-gold-light animate-bounce shadow-2xl">
-                Tap on green zone to spawn!
+                Tap on map to spawn!
             </div>
         </div>
     </div>
 </template>
+
+<style scoped>
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+</style>

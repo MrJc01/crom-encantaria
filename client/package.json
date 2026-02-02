@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@crom/shared": "*",
     "@types/three": "^0.182.0",
     "pinia": "^3.0.4",
+    "pixi.js": "^8.15.0",
     "sass": "^1.97.3",
     "three": "^0.182.0",
     "vue": "^3.5.24",

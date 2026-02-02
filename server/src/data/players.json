@@ -3,30 +3,18 @@
     "id": "hero_1",
     "name": "Hero One",
     "inventory": [
-      "archers",
-      "knights",
-      "dragon",
-      "fireball",
-      "arrows",
-      "giant",
-      "pecca",
-      "wizard",
-      "minions"
+      "archer_base",
+      "knight_base",
+      "mage_solar"
     ]
   },
   {
     "id": "hero_2",
     "name": "Hero Two",
     "inventory": [
-      "archers",
-      "knights",
-      "dragon",
-      "fireball",
-      "arrows",
-      "giant",
-      "pecca",
-      "wizard",
-      "minions"
+      "archer_base",
+      "knight_base",
+      "mage_solar"
     ]
   }
 ]

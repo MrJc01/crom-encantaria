@@ -54,18 +54,34 @@ export class CombatSystem {
 
         // Processar cada entidade
         for (const entity of entities) {
-            if (!entity.isAlive()) continue;
+            if (!entity.isAlive() || entity.isTower) continue;
 
-            // Buscar inimigos
+            // Identificar inimigos (unidades e torres)
             const enemies = entity.ownerId === 'player1'
                 ? player2Entities
                 : player1Entities;
 
-            // Encontrar alvo mais próximo
-            const target = this.findNearestEnemy(entity, enemies);
+            const oldTargetId = entity.targetId;
+
+            // 1. PRIORIDADE: Buscar unidade inimiga mais próxima dentro do aggroRange (Aggro/Distração)
+            const enemyUnits = enemies.filter(e => !e.isTower);
+            let target = this.findNearestWithinRange(entity, enemyUnits, entity.stats.aggroRange);
+
+            // 2. OBJETIVO: Se não houver unidades próximas, focar na torre inimiga mais próxima
+            if (!target) {
+                const enemyTowers = enemies.filter(e => e.isTower);
+                target = this.findNearestEnemy(entity, enemyTowers);
+            }
+
+            // Log se o alvo mudou para algo que não seja a torre (Aggro detectado)
+            if (target && target.id !== oldTargetId && !target.isTower && this.config.logAttacks) {
+                console.log(`[Tick ${tick}] 🎯 AGGRO: ${entity.id} mudou alvo para unidade ${target.id}`);
+            }
+
 
             // Atualizar estado FSM da entidade
             entity.updateState(target, tickTime, tick);
+
 
             // Se está atacando e pode atacar, aplicar dano
             if (
@@ -77,6 +93,32 @@ export class CombatSystem {
             }
         }
     }
+
+    /**
+     * Encontra a entidade inimiga mais próxima dentro de um raio específico.
+     */
+    private findNearestWithinRange(
+        entity: GameEntity,
+        enemies: GameEntity[],
+        range: number
+    ): GameEntity | null {
+        if (enemies.length === 0) return null;
+
+        let nearest: GameEntity | null = null;
+        let minDistance = range;
+
+        for (const enemy of enemies) {
+            // Unidades normais são alvos prioritários de aggro se estiverem no range
+            const dist = getDistance(entity.position, enemy.position);
+            if (dist <= minDistance) {
+                minDistance = dist;
+                nearest = enemy;
+            }
+        }
+
+        return nearest;
+    }
+
 
     /**
      * Encontra a entidade inimiga mais próxima.

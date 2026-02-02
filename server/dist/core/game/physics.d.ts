@@ -6,13 +6,8 @@
  *
  * @module core/game/physics
  */
-/**
- * Vetor 2D para posições e direções.
- */
-export interface Vector2D {
-    x: number;
-    y: number;
-}
+import type { Vector2D } from '@crom/shared';
+export type { Vector2D };
 /**
  * Interface mínima que uma entidade deve ter para física.
  */

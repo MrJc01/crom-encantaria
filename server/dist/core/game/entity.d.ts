@@ -6,22 +6,10 @@
  *
  * @module core/game/entity
  */
-import { Vector2D } from './physics.js';
-/**
- * Estados possíveis de uma entidade durante a partida.
- */
-export declare enum EntityState {
-    /** Sem alvo, parada */
-    IDLE = "IDLE",
-    /** Movendo em direção ao alvo */
-    MOVING = "MOVING",
-    /** Em alcance, atacando */
-    ATTACKING = "ATTACKING",
-    /** Aguardando cooldown entre ataques */
-    COOLDOWN = "COOLDOWN",
-    /** Morta, aguardando remoção */
-    DEAD = "DEAD"
-}
+import { EntityState } from '@crom/shared';
+import type { Vector2D, EntitySnapshot } from '@crom/shared';
+export { EntityState };
+export type { Vector2D, EntitySnapshot };
 /**
  * Estatísticas de uma entidade (após aplicar equipamentos).
  */
@@ -125,19 +113,6 @@ export declare class GameEntity {
      * Retorna um snapshot do estado da entidade para broadcast.
      */
     toSnapshot(): EntitySnapshot;
-}
-/**
- * Snapshot de entidade para sincronização com clientes.
- */
-export interface EntitySnapshot {
-    id: string;
-    ownerId: string;
-    unitId: string;
-    position: Vector2D;
-    hp: number;
-    maxHp: number;
-    state: EntityState;
-    targetId: string | null;
 }
 /**
  * Factory function para criar entidades.

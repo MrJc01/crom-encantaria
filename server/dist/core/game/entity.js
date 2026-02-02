@@ -7,22 +7,8 @@
  * @module core/game/entity
  */
 import { getDistance } from './physics.js';
-/**
- * Estados possíveis de uma entidade durante a partida.
- */
-export var EntityState;
-(function (EntityState) {
-    /** Sem alvo, parada */
-    EntityState["IDLE"] = "IDLE";
-    /** Movendo em direção ao alvo */
-    EntityState["MOVING"] = "MOVING";
-    /** Em alcance, atacando */
-    EntityState["ATTACKING"] = "ATTACKING";
-    /** Aguardando cooldown entre ataques */
-    EntityState["COOLDOWN"] = "COOLDOWN";
-    /** Morta, aguardando remoção */
-    EntityState["DEAD"] = "DEAD";
-})(EntityState || (EntityState = {}));
+import { EntityState } from '@crom/shared';
+export { EntityState };
 /**
  * Representa uma unidade viva na arena.
  *

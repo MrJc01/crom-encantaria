@@ -8,10 +8,12 @@
  *
  * @module core/game/game-room
  */
-import { Vector2D } from './physics.js';
-import { GameEntity, EntitySnapshot } from './entity.js';
+import type { Vector2D } from './physics.js';
+import { GameEntity } from './entity.js';
+import type { EntitySnapshot } from './entity.js';
 import { CombatStats } from './combat.js';
-import { S2CMessage } from '../net/protocol.js';
+import type { CardConfig } from '../types/deck.js';
+import type { S2CMessage } from '../net/protocol.js';
 /**
  * Estado de uma torre.
  */
@@ -42,6 +44,7 @@ export interface GameState {
 export interface PlayerConnection {
     playerId: string;
     deckId: string;
+    deckCards: CardConfig[];
 }
 /**
  * Callback para broadcast de mensagens.
@@ -122,6 +125,10 @@ export declare class GameRoom {
      * Inicia o game loop.
      */
     start(): void;
+    /**
+     * Faz broadcast de uma torre como se fosse uma entidade para reaproveitamento no renderer.
+     */
+    private broadcastTowerSpawned;
     /**
      * Para o game loop.
      */
@@ -223,8 +230,6 @@ export declare class GameRoom {
     private sendErrorToPlayer;
     /**
      * Obtém o deck do jogador.
-     * TODO: Implementar persistência real (banco de dados/cache)
-     * Por agora, retorna deck de teste para desenvolvimento.
      */
     private getPlayerDeck;
     /**

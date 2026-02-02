@@ -4,14 +4,14 @@
     "playerId": "hero_1",
     "name": "Starter Deck",
     "cards": [
-      "archers",
-      "knights",
-      "dragon",
-      "fireball",
-      "arrows",
-      "giant",
-      "pecca",
-      "wizard"
+      "archer_base",
+      "knight_base",
+      "mage_solar",
+      "archer_base",
+      "knight_base",
+      "mage_solar",
+      "archer_base",
+      "knight_base"
     ]
   },
   {
@@ -19,14 +19,14 @@
     "playerId": "hero_2",
     "name": "Starter Deck",
     "cards": [
-      "archers",
-      "knights",
-      "dragon",
-      "fireball",
-      "arrows",
-      "giant",
-      "pecca",
-      "wizard"
+      "archer_base",
+      "knight_base",
+      "mage_solar",
+      "archer_base",
+      "knight_base",
+      "mage_solar",
+      "archer_base",
+      "knight_base"
     ]
   }
 ]

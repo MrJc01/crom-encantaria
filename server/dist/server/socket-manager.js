@@ -12,6 +12,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { GameRoom } from '../core/game/game-room.js';
 import { C2SMessageType, S2CMessageType, parseC2SMessage, serializeMessage, createErrorMessage, } from '../core/net/protocol.js';
+import { SimpleDB } from '../data/db.js';
 /**
  * Estados possíveis de um cliente.
  */
@@ -161,6 +162,10 @@ export class SocketManager {
                 console.log(`[SocketManager] 📩 ${socketId} → ${message.type}`);
             }
             switch (message.type) {
+                case C2SMessageType.LOGIN:
+                    // @ts-ignore
+                    this.handleLogin(socketId, message.playerId);
+                    break;
                 case C2SMessageType.QUEUE_JOIN:
                     this.handleQueueJoin(socketId, message.deckId);
                     break;
@@ -199,6 +204,51 @@ export class SocketManager {
         this.clients.delete(socketId);
     }
     // ============================================
+    // AUTHENTICATION
+    // ============================================
+    /**
+     * Processa login do jogador.
+     */
+    handleLogin(socketId, playerId) {
+        const client = this.clients.get(socketId);
+        if (!client)
+            return;
+        if (!playerId) {
+            this.sendTo(socketId, createErrorMessage('INVALID_PARAMS', 'PlayerID is required'));
+            return;
+        }
+        const db = SimpleDB.getInstance();
+        const player = db.getPlayer(playerId);
+        if (!player) {
+            this.sendTo(socketId, createErrorMessage('PLAYER_NOT_FOUND', 'Jogador não encontrado'));
+            return;
+        }
+        const deck = db.getDeck(playerId); // Tenta pegar deck default
+        if (!deck) {
+            this.sendTo(socketId, createErrorMessage('DECK_NOT_FOUND', 'Nenhum deck encontrado para o jogador'));
+            return;
+        }
+        // Armazenar sessão
+        client.player = player;
+        client.deck = deck;
+        client.deckId = deck.id;
+        // Responder sucesso
+        console.log(`[SocketManager] 🔑 Login sucesso: ${playerId} (${client.socketId})`);
+        this.sendTo(socketId, {
+            type: S2CMessageType.LOGIN_SUCCESS,
+            player: {
+                id: player.id,
+                name: player.name,
+                inventory: player.inventory
+            },
+            deck: {
+                id: deck.id,
+                name: deck.name,
+                cards: deck.cards
+            }
+        });
+    }
+    // ============================================
     // MATCHMAKING
     // ============================================
     /**
@@ -211,6 +261,11 @@ export class SocketManager {
         // Verificar se já está na fila ou em jogo
         if (client.state !== ClientState.CONNECTED) {
             this.sendTo(socketId, createErrorMessage('INVALID_STATE', 'Já está na fila ou em jogo'));
+            return;
+        }
+        // Verificar login
+        if (!client.player || !client.deck) {
+            this.sendTo(socketId, createErrorMessage('LOGIN_REQUIRED', 'Faça login antes de jogar'));
             return;
         }
         // Atualizar estado
@@ -280,17 +335,37 @@ export class SocketManager {
         const room = new GameRoom(roomId, {
             tickRate: this.config.tickRate,
             maxDuration: this.config.maxGameDuration,
-            verboseLogging: false, // Desativar logs internos em produção
+            verboseLogging: false,
             broadcastFn: (message) => {
                 this.broadcastToRoom(roomId, message);
+            },
+            sendToPlayerFn: (playerIndex, message) => {
+                const targetSocketId = playerIndex === 1 ? client1.socketId : client2.socketId;
+                this.sendTo(targetSocketId, message);
             },
             onGameEnd: (winnerId, reason) => {
                 this.handleGameEnd(roomId, winnerId, reason);
             },
         });
         // Adicionar jogadores
-        const p1Conn = { playerId: client1.socketId, deckId: client1.deckId };
-        const p2Conn = { playerId: client2.socketId, deckId: client2.deckId };
+        const p1Conn = {
+            playerId: client1.player.id,
+            deckId: client1.deck.id,
+            deckCards: client1.deck.cards.map((id, index) => ({
+                slotIndex: index,
+                baseUnitId: id,
+                equippedItems: []
+            }))
+        };
+        const p2Conn = {
+            playerId: client2.player.id,
+            deckId: client2.deck.id,
+            deckCards: client2.deck.cards.map((id, index) => ({
+                slotIndex: index,
+                baseUnitId: id,
+                equippedItems: []
+            }))
+        };
         room.addPlayer(p1Conn, 1);
         room.addPlayer(p2Conn, 2);
         // Atualizar estado dos clientes
@@ -304,15 +379,15 @@ export class SocketManager {
         this.sendTo(client1.socketId, {
             type: S2CMessageType.MATCH_START,
             roomId,
-            you: { playerId: client1.socketId, playerIndex: 1, deckId: client1.deckId },
-            opponent: { playerId: client2.socketId, playerIndex: 2, deckId: client2.deckId },
+            you: { playerId: client1.player.id, playerIndex: 1, deckId: client1.deckId },
+            opponent: { playerId: client2.player.id, playerIndex: 2, deckId: client2.deckId },
             tickRate: this.config.tickRate,
         });
         this.sendTo(client2.socketId, {
             type: S2CMessageType.MATCH_START,
             roomId,
-            you: { playerId: client2.socketId, playerIndex: 2, deckId: client2.deckId },
-            opponent: { playerId: client1.socketId, playerIndex: 1, deckId: client1.deckId },
+            you: { playerId: client2.player.id, playerIndex: 2, deckId: client2.deckId },
+            opponent: { playerId: client1.player.id, playerIndex: 1, deckId: client1.deckId },
             tickRate: this.config.tickRate,
         });
         console.log(`[SocketManager] 🎮 Partida criada: ${roomId} | ${client1.socketId} vs ${client2.socketId}`);
@@ -334,7 +409,8 @@ export class SocketManager {
             return;
         }
         // Determinar índice do jogador
-        const playerIndex = room.getPlayerIndex(socketId);
+        // FIX: Usar o ID persistente do jogador, não o SocketID
+        const playerIndex = room.getPlayerIndex(client.player.id);
         if (!playerIndex) {
             this.sendTo(socketId, createErrorMessage('PLAYER_NOT_FOUND', 'Jogador não encontrado na sala'));
             return;

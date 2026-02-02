@@ -142,10 +142,32 @@ export class GameRoom {
         console.log(`[GameRoom ${this.roomId}] 🎮 Iniciando partida a ${this.config.tickRate}Hz...`);
         this.gameState.isRunning = true;
         this.gameState.startTime = Date.now();
+        // Broadcast torres iniciais para o cliente renderizar
+        this.gameState.towers.forEach(tower => {
+            this.broadcastTowerSpawned(tower);
+        });
         // Iniciar tick loop
         this.tickInterval = setInterval(() => {
             this.tick();
         }, this.tickDuration);
+    }
+    /**
+     * Faz broadcast de uma torre como se fosse uma entidade para reaproveitamento no renderer.
+     */
+    broadcastTowerSpawned(tower) {
+        if (!this.broadcastFn)
+            return;
+        const spawnData = {
+            id: tower.id,
+            ownerId: tower.ownerId,
+            unitId: tower.id.includes('core') ? 'tower_core' : 'tower_small', // Usar IDs visuais específicos
+            maxHp: tower.maxHealth,
+            position: { ...tower.position },
+        };
+        this.broadcastFn({
+            type: S2CMessageType.ENTITY_SPAWNED,
+            entity: spawnData,
+        });
     }
     /**
      * Para o game loop.
@@ -214,8 +236,11 @@ export class GameRoom {
      * Faz broadcast de entidade spawnada para os clientes.
      */
     broadcastEntitySpawned(entity) {
-        if (!this.broadcastFn)
+        console.log(`[GameRoom] 📡 Tentando broadcast de SPWN: ${entity.id}`);
+        if (!this.broadcastFn) {
+            console.error(`[GameRoom] ❌ broadcastFn é NULL!`);
             return;
+        }
         const spawnData = {
             id: entity.id,
             ownerId: entity.ownerId,
@@ -223,6 +248,7 @@ export class GameRoom {
             maxHp: entity.stats.maxHp,
             position: { ...entity.position },
         };
+        console.log(`[GameRoom] 📤 Enviando ENTITY_SPAWNED:`, JSON.stringify(spawnData));
         this.broadcastFn({
             type: S2CMessageType.ENTITY_SPAWNED,
             entity: spawnData,
@@ -541,31 +567,18 @@ export class GameRoom {
     }
     /**
      * Obtém o deck do jogador.
-     * TODO: Implementar persistência real (banco de dados/cache)
-     * Por agora, retorna deck de teste para desenvolvimento.
      */
     getPlayerDeck(playerIndex) {
-        // Deck de teste para desenvolvimento
-        // Em produção, buscar do banco de dados pelo playerId
-        const playerId = playerIndex === 1
-            ? this.player1?.playerId || ''
-            : this.player2?.playerId || '';
+        const player = playerIndex === 1 ? this.player1 : this.player2;
+        if (!player)
+            return null;
         return {
-            deckId: `test_deck_p${playerIndex}`,
-            playerId,
-            deckName: 'Test Deck',
-            cards: [
-                { slotIndex: 0, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 1, baseUnitId: 'archer_base', equippedItems: [] },
-                { slotIndex: 2, baseUnitId: 'mage_base', equippedItems: [] },
-                { slotIndex: 3, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 4, baseUnitId: 'archer_base', equippedItems: [] },
-                { slotIndex: 5, baseUnitId: 'mage_base', equippedItems: [] },
-                { slotIndex: 6, baseUnitId: 'knight_base', equippedItems: [] },
-                { slotIndex: 7, baseUnitId: 'archer_base', equippedItems: [] },
-            ],
+            deckId: player.deckId,
+            playerId: player.playerId,
+            deckName: 'Player Deck',
+            cards: player.deckCards,
             createdAt: new Date(),
-            updatedAt: new Date(),
+            updatedAt: new Date()
         };
     }
     /**

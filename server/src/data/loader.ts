@@ -1,123 +1,52 @@
 /**
  * Magic Royale - Data Loader
  * 
- * Carrega os dados estáticos (unidades e itens) dos arquivos JSON.
- * Em produção, isso poderia vir de um banco de dados ou cache Redis.
+ * Facade para o catálogo compartilhado em @crom/shared.
  * 
  * @module data/loader
  */
 
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import type { UnitBase } from '../core/types/unit.js';
-import type { Item } from '../core/types/item.js';
-
-// ES Module __dirname equivalent
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Resolver caminho para os arquivos JSON
-// Em dev: src/data/, em produção: dist/data/ -> precisa voltar para src/data/
-// Solução: usar process.cwd() + src/data/ como fallback
-function getDataPath(filename: string): string {
-    const localPath = join(__dirname, filename);
-    // Se o arquivo não existe localmente (dist), buscar em src/data
-    const srcPath = join(process.cwd(), 'src', 'data', filename);
-    try {
-        readFileSync(localPath, 'utf-8');
-        return localPath;
-    } catch {
-        return srcPath;
-    }
-}
-
-/**
- * Estrutura do arquivo units.json
- */
-interface UnitsData {
-    units: UnitBase[];
-}
-
-/**
- * Estrutura do arquivo items.json
- */
-interface ItemsData {
-    items: Item[];
-}
-
-/**
- * Cache em memória para os dados carregados.
- */
-let unitsCache: Map<string, UnitBase> | null = null;
-let itemsCache: Map<string, Item> | null = null;
+import {
+    UnitsMap,
+    ItemsMap,
+    getUnitById as getSharedUnit,
+    getItemById as getSharedItem,
+    UnitBase,
+    Item
+} from '@crom/shared';
 
 /**
  * Carrega todas as unidades do catálogo.
- * Retorna um Map indexado por unitId para lookup O(1).
  */
 export function loadUnits(): Map<string, UnitBase> {
-    if (unitsCache) {
-        return unitsCache;
-    }
-
-    const filePath = getDataPath('units.json');
-    const rawData = readFileSync(filePath, 'utf-8');
-    const data: UnitsData = JSON.parse(rawData);
-
-    unitsCache = new Map();
-    for (const unit of data.units) {
-        unitsCache.set(unit.unitId, unit);
-    }
-
-    console.log(`[DataLoader] Carregadas ${unitsCache.size} unidades do catálogo.`);
-    return unitsCache;
+    return UnitsMap;
 }
 
 /**
  * Carrega todos os itens do catálogo.
- * Retorna um Map indexado por itemId para lookup O(1).
  */
 export function loadItems(): Map<string, Item> {
-    if (itemsCache) {
-        return itemsCache;
-    }
-
-    const filePath = getDataPath('items.json');
-    const rawData = readFileSync(filePath, 'utf-8');
-    const data: ItemsData = JSON.parse(rawData);
-
-    itemsCache = new Map();
-    for (const item of data.items) {
-        itemsCache.set(item.itemId, item);
-    }
-
-    console.log(`[DataLoader] Carregados ${itemsCache.size} itens do catálogo.`);
-    return itemsCache;
+    return ItemsMap;
 }
 
 /**
  * Busca uma unidade pelo ID.
- * @returns A unidade ou undefined se não encontrada.
  */
 export function getUnitById(unitId: string): UnitBase | undefined {
-    const units = loadUnits();
-    return units.get(unitId);
+    return getSharedUnit(unitId);
 }
 
 /**
  * Busca um item pelo ID.
- * @returns O item ou undefined se não encontrado.
  */
 export function getItemById(itemId: string): Item | undefined {
-    const items = loadItems();
-    return items.get(itemId);
+    return getSharedItem(itemId);
 }
 
 /**
- * Limpa o cache (útil para testes).
+ * Limpa o cache.
+ * (No-op pois os dados agora são constantes compartilhadas)
  */
 export function clearDataCache(): void {
-    unitsCache = null;
-    itemsCache = null;
+    // No-op
 }

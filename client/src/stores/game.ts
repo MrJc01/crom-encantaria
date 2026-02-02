@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import { GameClient } from '../net/GameClient';
 import { S2CMessageType, type EntitySpawnData, type GameTickPayload, type S2CError, type S2CLoginSuccess, type S2CMatchStart, type S2CEntitySpawned, type S2CGameTick } from '../net/protocol';
 
@@ -14,8 +14,9 @@ export const useGameStore = defineStore('game', () => {
     const lastError = ref<string | null>(null);
 
     // Game State
-    const entityRegistry = ref<Map<string, EntitySpawnData>>(new Map());
+    const entityRegistry = reactive(new Map<string, EntitySpawnData>());
     const lastTick = ref<GameTickPayload | null>(null);
+
     const mana = ref({ current: 0, max: 10 });
 
     // Deck & collection (Synced with server/src/data/units.json)
@@ -60,8 +61,13 @@ export const useGameStore = defineStore('game', () => {
         client.on<S2CLoginSuccess>(S2CMessageType.LOGIN_SUCCESS, (msg) => {
             isAuthenticated.value = true;
             player.value = msg.player;
+            // Update current deck from login
+            if (msg.deck && msg.deck.cards) {
+                currentDeck.value = msg.deck.cards;
+            }
             // Persist ID
             localStorage.setItem('crom_player_id', msg.player.id || '');
+
         });
 
         client.on<S2CError>(S2CMessageType.ERROR, (msg) => {
@@ -84,12 +90,14 @@ export const useGameStore = defineStore('game', () => {
         client.on<S2CMatchStart>(S2CMessageType.MATCH_START, (msg) => {
             inQueue.value = false;
             matchData.value = msg;
-            entityRegistry.value.clear();
+            entityRegistry.clear();
+
             lastTick.value = null;
         });
 
         client.on<S2CEntitySpawned>(S2CMessageType.ENTITY_SPAWNED, (msg) => {
-            entityRegistry.value.set(msg.entity.id, msg.entity);
+            entityRegistry.set(msg.entity.id, msg.entity);
+
         });
 
         client.on<S2CGameTick>(S2CMessageType.GAME_TICK, (msg) => {

@@ -7,13 +7,12 @@
  * @module core/game/physics
  */
 
-/**
- * Vetor 2D para posições e direções.
- */
-export interface Vector2D {
-    x: number;
-    y: number;
-}
+import type { Vector2D } from '@crom/shared';
+export type { Vector2D };
+
+
+
+
 
 /**
  * Interface mínima que uma entidade deve ter para física.
@@ -25,7 +24,9 @@ export interface PhysicsEntity {
     moveSpeed: number;
     targetPosition: Vector2D | null;
     isMoving: boolean;
+    isTower?: boolean;
 }
+
 
 // ============================================
 // FUNÇÕES UTILITÁRIAS DE VETORES
@@ -281,12 +282,17 @@ export class PhysicsSystem {
                     const pushForce = overlap * this.config.separationForce * deltaTime;
                     const halfPush = pushForce * 0.5;
 
-                    // Empurrar cada entidade para lados opostos
-                    a.position.x -= nx * halfPush;
-                    a.position.y -= ny * halfPush;
-                    b.position.x += nx * halfPush;
-                    b.position.y += ny * halfPush;
+                    // Empurrar cada entidade para lados opostos (apenas se não forem torres)
+                    if (!a.isTower) {
+                        a.position.x -= nx * (b.isTower ? pushForce : halfPush);
+                        a.position.y -= ny * (b.isTower ? pushForce : halfPush);
+                    }
+                    if (!b.isTower) {
+                        b.position.x += nx * (a.isTower ? pushForce : halfPush);
+                        b.position.y += ny * (a.isTower ? pushForce : halfPush);
+                    }
                 }
+
             }
         }
     }

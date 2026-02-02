@@ -21,7 +21,8 @@ import {
     createErrorMessage,
 } from '../core/net/protocol.js';
 import { SimpleDB, PlayerModel, DeckModel } from '../data/db.js';
-import type { CardConfig } from '../core/types/deck.js';
+// import type { CardConfig } from '../core/types/deck.js';
+
 
 // ============================================
 // TIPOS INTERNOS
@@ -452,10 +453,15 @@ export class SocketManager {
             broadcastFn: (message: S2CMessage) => {
                 this.broadcastToRoom(roomId, message);
             },
+            sendToPlayerFn: (playerIndex: 1 | 2, message: S2CMessage) => {
+                const targetSocketId = playerIndex === 1 ? client1.socketId : client2.socketId;
+                this.sendTo(targetSocketId, message);
+            },
             onGameEnd: (winnerId: string, reason: string) => {
                 this.handleGameEnd(roomId, winnerId, reason);
             },
         });
+
 
         // Adicionar jogadores
         const p1Conn: PlayerConnection = {
