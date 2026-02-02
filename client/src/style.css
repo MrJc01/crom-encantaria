@@ -1,79 +1,70 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+@import url('https://fonts.googleapis.com/css2?family=Titan+One&display=swap');
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
-}
-
-#app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@layer base {
+  body {
+    @apply bg-royale-bg text-white font-sans overflow-hidden select-none;
+    margin: 0;
+    padding: 0;
   }
-  a:hover {
-    color: #747bff;
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
-  button {
-    background-color: #f9f9f9;
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .bg-gradient-radial {
+    background: radial-gradient(circle at center, var(--tw-gradient-from) 0%, var(--tw-gradient-to) 100%);
+  }
+}
+
+@layer components {
+  .btn-royale {
+    @apply border-none rounded-lg font-titan text-xl uppercase text-white cursor-pointer relative transition-transform duration-100 shadow-royale-3d;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  .btn-royale:active {
+    @apply translate-y-1 shadow-none;
+  }
+
+  /* Yellow Variant (Battle) */
+  .btn-yellow {
+    @apply bg-gradient-to-b from-royale-gold-light to-royale-gold text-[#583300] shadow-royale-battle;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  .btn-yellow:active {
+    @apply shadow-none;
+    box-shadow: inset 0 4px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Blue Variant (Normal) */
+  .btn-blue {
+    @apply bg-gradient-to-b from-royale-blue-light to-royale-blue shadow-royale-blue;
+  }
+
+  .btn-blue:active {
+    @apply shadow-none;
+    box-shadow: inset 0 4px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Green Variant (Upgrade) */
+  .btn-green {
+    @apply bg-gradient-to-b from-royale-green-light to-royale-green text-[#004d13] shadow-royale-green;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  .currency-badge {
+    @apply flex items-center bg-black bg-opacity-60 px-3 py-1 rounded-2xl font-bold gap-1.5 border;
   }
 }

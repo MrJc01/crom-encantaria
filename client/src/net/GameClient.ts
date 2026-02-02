@@ -1,9 +1,4 @@
-import { type C2SMessage, C2SMessageType, type S2CMessage, S2CMessageType, type EntitySpawnData, type GameTickPayload, type PlayerMatchData, type S2CError } from './protocol'; // We will need to create protocol.ts in client or import/copy it
-
-// Since we cannot easily share files between root/server and root/client in this setup without a monorepo workspace tool, 
-// we will COPY the protocol definition to client/src/net/protocol.ts as per plan.
-
-// We will implement the class assuming protocol.ts is there.
+import { type C2SMessage, C2SMessageType, type S2CMessage, S2CMessageType } from './protocol';
 
 export type GameClientConfig = {
     url: string;

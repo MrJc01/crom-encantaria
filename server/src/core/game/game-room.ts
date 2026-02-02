@@ -16,7 +16,7 @@ import { getUnitById, getItemById } from '../../data/loader.js';
 import { calculateCardCostByIds } from '../validation/deck-validator.js';
 import type { UnitBaseStats } from '../types/unit.js';
 import type { ItemStatsModifier } from '../types/item.js';
-import type { PlayerDeck } from '../types/deck.js';
+import type { PlayerDeck, CardConfig } from '../types/deck.js';
 import {
     S2CMessage,
     S2CMessageType,
@@ -27,7 +27,6 @@ import {
     ErrorCode,
     stateToCode,
 } from '../net/protocol.js';
-import type { CardConfig, PlayerDeck } from '../types/deck.js';
 
 // ============================================
 // CONSTANTES DE ANTI-CHEAT
@@ -341,7 +340,12 @@ export class GameRoom {
      * Faz broadcast de entidade spawnada para os clientes.
      */
     private broadcastEntitySpawned(entity: GameEntity): void {
-        if (!this.broadcastFn) return;
+        console.log(`[GameRoom] 📡 Tentando broadcast de SPWN: ${entity.id}`);
+
+        if (!this.broadcastFn) {
+            console.error(`[GameRoom] ❌ broadcastFn é NULL!`);
+            return;
+        }
 
         const spawnData: EntitySpawnData = {
             id: entity.id,
@@ -350,6 +354,8 @@ export class GameRoom {
             maxHp: entity.stats.maxHp,
             position: { ...entity.position },
         };
+
+        console.log(`[GameRoom] 📤 Enviando ENTITY_SPAWNED:`, JSON.stringify(spawnData));
 
         this.broadcastFn({
             type: S2CMessageType.ENTITY_SPAWNED,

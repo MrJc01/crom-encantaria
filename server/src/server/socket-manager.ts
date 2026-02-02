@@ -19,7 +19,6 @@ import {
     parseC2SMessage,
     serializeMessage,
     createErrorMessage,
-    S2CMessageType,
 } from '../core/net/protocol.js';
 import { SimpleDB, PlayerModel, DeckModel } from '../data/db.js';
 import type { CardConfig } from '../core/types/deck.js';
@@ -244,7 +243,7 @@ export class SocketManager {
 
             switch (message.type) {
                 case C2SMessageType.LOGIN:
-                    // @ts-ignore - TS doesn't know about the new type yet due to partial compilation view? or simpler just cast
+                    // @ts-ignore
                     this.handleLogin(socketId, (message as any).playerId);
                     break;
 
@@ -449,7 +448,7 @@ export class SocketManager {
         const room = new GameRoom(roomId, {
             tickRate: this.config.tickRate,
             maxDuration: this.config.maxGameDuration,
-            verboseLogging: false, // Desativar logs internos em produção
+            verboseLogging: false,
             broadcastFn: (message: S2CMessage) => {
                 this.broadcastToRoom(roomId, message);
             },
@@ -459,9 +458,8 @@ export class SocketManager {
         });
 
         // Adicionar jogadores
-        // Adicionar jogadores (Usando os decks reais carregados no login)
         const p1Conn: PlayerConnection = {
-            playerId: client1.player!.id, // Usar ID real
+            playerId: client1.player!.id,
             deckId: client1.deck!.id,
             deckCards: client1.deck!.cards.map((id, index) => ({
                 slotIndex: index,
@@ -470,7 +468,7 @@ export class SocketManager {
             }))
         };
         const p2Conn: PlayerConnection = {
-            playerId: client2.player!.id, // Usar ID real
+            playerId: client2.player!.id,
             deckId: client2.deck!.id,
             deckCards: client2.deck!.cards.map((id, index) => ({
                 slotIndex: index,
@@ -495,16 +493,16 @@ export class SocketManager {
         this.sendTo(client1.socketId, {
             type: S2CMessageType.MATCH_START,
             roomId,
-            you: { playerId: client1.socketId, playerIndex: 1, deckId: client1.deckId },
-            opponent: { playerId: client2.socketId, playerIndex: 2, deckId: client2.deckId },
+            you: { playerId: client1.player!.id, playerIndex: 1, deckId: client1.deckId },
+            opponent: { playerId: client2.player!.id, playerIndex: 2, deckId: client2.deckId },
             tickRate: this.config.tickRate,
         });
 
         this.sendTo(client2.socketId, {
             type: S2CMessageType.MATCH_START,
             roomId,
-            you: { playerId: client2.socketId, playerIndex: 2, deckId: client2.deckId },
-            opponent: { playerId: client1.socketId, playerIndex: 1, deckId: client1.deckId },
+            you: { playerId: client2.player!.id, playerIndex: 2, deckId: client2.deckId },
+            opponent: { playerId: client1.player!.id, playerIndex: 1, deckId: client1.deckId },
             tickRate: this.config.tickRate,
         });
 
@@ -531,7 +529,8 @@ export class SocketManager {
         }
 
         // Determinar índice do jogador
-        const playerIndex = room.getPlayerIndex(socketId);
+        // FIX: Usar o ID persistente do jogador, não o SocketID
+        const playerIndex = room.getPlayerIndex(client.player!.id);
         if (!playerIndex) {
             this.sendTo(socketId, createErrorMessage('PLAYER_NOT_FOUND', 'Jogador não encontrado na sala'));
             return;

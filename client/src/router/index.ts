@@ -19,6 +19,11 @@ const router = createRouter({
             name: 'match',
             component: () => import('../views/MatchView.vue'),
         },
+        {
+            path: '/deck',
+            name: 'deck',
+            component: () => import('../views/DeckView.vue'),
+        },
     ],
 })
 
